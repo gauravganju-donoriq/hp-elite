@@ -1,4 +1,11 @@
-import { Match, Standing, Group, Team } from "./types";
+import {
+  Match,
+  Standing,
+  Group,
+  Team,
+  PlayerAvailability,
+  SuggestedMatch,
+} from "./types";
 
 export function generateGroupFixtures(
   tournamentId: string,
@@ -182,4 +189,134 @@ export function generateKnockoutMatches(
   });
 
   return knockoutMatches;
+}
+
+function getDatesInRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const cur = new Date(start + "T12:00:00");
+  const last = new Date(end + "T12:00:00");
+  while (cur <= last) {
+    dates.push(cur.toISOString().split("T")[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+function countAvailable(
+  teamId: string,
+  tournamentId: string,
+  date: string,
+  availability: PlayerAvailability[],
+  teams: Team[]
+): { available: number; total: number } {
+  const team = teams.find((t) => t.id === teamId);
+  const total = team?.players.length ?? 0;
+  const teamAvail = availability.filter(
+    (a) => a.teamId === teamId && a.tournamentId === tournamentId
+  );
+  let available = 0;
+  for (const pa of teamAvail) {
+    if (pa.slots.some((s) => s.date === date)) available++;
+  }
+  return { available, total };
+}
+
+export function suggestFixtures(
+  groups: Group[],
+  teams: Team[],
+  availability: PlayerAvailability[],
+  tournamentId: string,
+  startDate: string,
+  endDate: string,
+  existingMatches: Match[]
+): SuggestedMatch[] {
+  const allDates = getDatesInRange(startDate, endDate);
+  const suggestions: SuggestedMatch[] = [];
+
+  const existingPairings = new Set(
+    existingMatches
+      .filter((m) => m.stage === "group")
+      .map((m) => `${m.homeTeamId}-${m.awayTeamId}`)
+  );
+
+  const pairings: { homeTeamId: string; awayTeamId: string; group: string }[] =
+    [];
+  for (const group of groups) {
+    for (let i = 0; i < group.teamIds.length; i++) {
+      for (let j = i + 1; j < group.teamIds.length; j++) {
+        const key = `${group.teamIds[i]}-${group.teamIds[j]}`;
+        if (!existingPairings.has(key)) {
+          pairings.push({
+            homeTeamId: group.teamIds[i],
+            awayTeamId: group.teamIds[j],
+            group: group.name,
+          });
+        }
+      }
+    }
+  }
+
+  const usedSlots = new Map<string, Set<string>>();
+
+  for (const pairing of pairings) {
+    let bestDate = "";
+    let bestScore = -1;
+    let bestHomeAvail = 0;
+    let bestAwayAvail = 0;
+    let bestHomeTot = 0;
+    let bestAwayTot = 0;
+
+    for (const date of allDates) {
+      const homeUsed = usedSlots.get(date)?.has(pairing.homeTeamId);
+      const awayUsed = usedSlots.get(date)?.has(pairing.awayTeamId);
+      if (homeUsed || awayUsed) continue;
+
+      const home = countAvailable(
+        pairing.homeTeamId,
+        tournamentId,
+        date,
+        availability,
+        teams
+      );
+      const away = countAvailable(
+        pairing.awayTeamId,
+        tournamentId,
+        date,
+        availability,
+        teams
+      );
+
+      const score = home.available + away.available;
+      if (score > bestScore) {
+        bestScore = score;
+        bestDate = date;
+        bestHomeAvail = home.available;
+        bestAwayAvail = away.available;
+        bestHomeTot = home.total;
+        bestAwayTot = away.total;
+      }
+    }
+
+    if (bestDate) {
+      if (!usedSlots.has(bestDate)) usedSlots.set(bestDate, new Set());
+      usedSlots.get(bestDate)!.add(pairing.homeTeamId);
+      usedSlots.get(bestDate)!.add(pairing.awayTeamId);
+
+      suggestions.push({
+        id: `sug-${suggestions.length + 1}`,
+        homeTeamId: pairing.homeTeamId,
+        awayTeamId: pairing.awayTeamId,
+        date: bestDate,
+        time: "17:00",
+        availableHomePlayers: bestHomeAvail,
+        totalHomePlayers: bestHomeTot,
+        availableAwayPlayers: bestAwayAvail,
+        totalAwayPlayers: bestAwayTot,
+        score: bestScore,
+        group: pairing.group,
+      });
+    }
+  }
+
+  return suggestions.sort((a, b) => b.score - a.score);
 }

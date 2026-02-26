@@ -34,7 +34,7 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
 
   return (
     <Card className="group relative transition-shadow hover:shadow-lg">
-      <Link href={`/tournaments/${tournament.id}`}>
+      <Link href={`/admin/tournaments/${tournament.id}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <CardTitle className="text-xl">{tournament.name}</CardTitle>

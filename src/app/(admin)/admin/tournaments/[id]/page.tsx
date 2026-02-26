@@ -25,6 +25,8 @@ import { StandingsTable } from "@/components/standings-table";
 import { FixtureList } from "@/components/fixture-list";
 import { ScheduleView } from "@/components/schedule-view";
 import { KnockoutBracket } from "@/components/knockout-bracket";
+import { TeamAvailabilityGrid } from "@/components/team-availability-grid";
+import { SuggestedFixtureList } from "@/components/suggested-fixture-list";
 import { generateGroupFixtures } from "@/lib/fixture-utils";
 import { toast } from "sonner";
 import { Match, Tournament } from "@/lib/types";
@@ -57,7 +59,7 @@ export default function TournamentDetailPage({
         <p className="text-muted-foreground mt-1">
           This tournament may have been deleted.
         </p>
-        <Link href="/" className="mt-4">
+        <Link href="/admin" className="mt-4">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard
@@ -112,7 +114,7 @@ function TournamentDetail({ tournament }: { tournament: Tournament }) {
           variant="ghost"
           size="sm"
           className="mb-2"
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/admin")}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
@@ -159,7 +161,7 @@ function TournamentDetail({ tournament }: { tournament: Tournament }) {
               </div>
             </div>
           </div>
-          <Link href={`/tournaments/${tournament.id}/teams`}>
+          <Link href={`/admin/tournaments/${tournament.id}/teams`}>
             <Button variant="outline">
               <Users className="mr-2 h-4 w-4" />
               Manage Teams
@@ -171,8 +173,9 @@ function TournamentDetail({ tournament }: { tournament: Tournament }) {
       <Separator />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="groups">Groups</TabsTrigger>
+          <TabsTrigger value="availability">Availability</TabsTrigger>
           <TabsTrigger value="fixtures">Fixtures</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="standings">Standings</TabsTrigger>
@@ -209,7 +212,12 @@ function TournamentDetail({ tournament }: { tournament: Tournament }) {
           )}
         </TabsContent>
 
-        <TabsContent value="fixtures" className="mt-6">
+        <TabsContent value="availability" className="mt-6">
+          <TeamAvailabilityGrid tournament={tournament} />
+        </TabsContent>
+
+        <TabsContent value="fixtures" className="mt-6 space-y-6">
+          <SuggestedFixtureList tournament={tournament} />
           <FixtureList
             matches={tournament.matches}
             teams={tournament.teams}

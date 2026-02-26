@@ -1,4 +1,4 @@
-import { Tournament, Team, Player } from "./types";
+import { Tournament, Team, Player, PlayerAvailability } from "./types";
 
 function makePlayer(
   id: string,
@@ -266,6 +266,55 @@ export const initialTournaments: Tournament[] = [
     ],
     matches: [],
   },
+];
+
+function generateSlots(dates: string[], startTime = "17:00", endTime = "20:00") {
+  return dates.map((date) => ({ date, startTime, endTime }));
+}
+
+const feb = (d: number) => `2026-02-${String(d).padStart(2, "0")}`;
+
+export const initialAvailability: PlayerAvailability[] = [
+  // Team 1 - FC Phoenix
+  { playerId: "p1", teamId: "team-1", tournamentId: "t1", slots: generateSlots([feb(2), feb(3), feb(5), feb(7), feb(9), feb(11), feb(14), feb(16), feb(18), feb(20)]) },
+  { playerId: "p2", teamId: "team-1", tournamentId: "t1", slots: generateSlots([feb(2), feb(4), feb(6), feb(8), feb(10), feb(13), feb(15), feb(17), feb(20)]) },
+  { playerId: "p3", teamId: "team-1", tournamentId: "t1", slots: generateSlots([feb(2), feb(3), feb(4), feb(6), feb(8), feb(11), feb(14), feb(18), feb(20)]) },
+  { playerId: "p4", teamId: "team-1", tournamentId: "t1", slots: generateSlots([feb(3), feb(5), feb(7), feb(9), feb(12), feb(15), feb(17), feb(20)]) },
+  // Team 2 - Dynamo United
+  { playerId: "p5", teamId: "team-2", tournamentId: "t1", slots: generateSlots([feb(2), feb(4), feb(6), feb(9), feb(11), feb(14), feb(16), feb(19), feb(21)]) },
+  { playerId: "p6", teamId: "team-2", tournamentId: "t1", slots: generateSlots([feb(2), feb(3), feb(5), feb(7), feb(10), feb(13), feb(16), feb(19), feb(21)]) },
+  { playerId: "p7", teamId: "team-2", tournamentId: "t1", slots: generateSlots([feb(3), feb(5), feb(8), feb(10), feb(12), feb(15), feb(18), feb(21)]) },
+  { playerId: "p8", teamId: "team-2", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(9), feb(11), feb(14), feb(17), feb(19), feb(21)]) },
+  // Team 3 - Real Azul
+  { playerId: "p9", teamId: "team-3", tournamentId: "t1", slots: generateSlots([feb(3), feb(5), feb(7), feb(10), feb(12), feb(15), feb(18), feb(20)]) },
+  { playerId: "p10", teamId: "team-3", tournamentId: "t1", slots: generateSlots([feb(3), feb(4), feb(6), feb(9), feb(11), feb(14), feb(17), feb(20)]) },
+  { playerId: "p11", teamId: "team-3", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(8), feb(10), feb(13), feb(16), feb(18), feb(20)]) },
+  { playerId: "p12", teamId: "team-3", tournamentId: "t1", slots: generateSlots([feb(5), feb(7), feb(9), feb(12), feb(14), feb(17), feb(19)]) },
+  // Team 4 - Striker City
+  { playerId: "p13", teamId: "team-4", tournamentId: "t1", slots: generateSlots([feb(3), feb(5), feb(8), feb(10), feb(13), feb(16), feb(19)]) },
+  { playerId: "p14", teamId: "team-4", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(8), feb(11), feb(14), feb(17), feb(19)]) },
+  { playerId: "p15", teamId: "team-4", tournamentId: "t1", slots: generateSlots([feb(3), feb(5), feb(7), feb(10), feb(12), feb(15), feb(18)]) },
+  { playerId: "p16", teamId: "team-4", tournamentId: "t1", slots: generateSlots([feb(4), feb(7), feb(9), feb(11), feb(14), feb(16), feb(19)]) },
+  // Team 5 - Thunder FC
+  { playerId: "p17", teamId: "team-5", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(9), feb(11), feb(14), feb(17), feb(20)]) },
+  { playerId: "p18", teamId: "team-5", tournamentId: "t1", slots: generateSlots([feb(4), feb(5), feb(7), feb(10), feb(13), feb(16), feb(19)]) },
+  { playerId: "p19", teamId: "team-5", tournamentId: "t1", slots: generateSlots([feb(5), feb(7), feb(9), feb(12), feb(15), feb(18), feb(20)]) },
+  { playerId: "p20", teamId: "team-5", tournamentId: "t1", slots: generateSlots([feb(6), feb(8), feb(10), feb(13), feb(16), feb(19)]) },
+  // Team 6 - Olympia SC
+  { playerId: "p21", teamId: "team-6", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(8), feb(11), feb(14), feb(17), feb(20)]) },
+  { playerId: "p22", teamId: "team-6", tournamentId: "t1", slots: generateSlots([feb(5), feb(7), feb(9), feb(12), feb(15), feb(18)]) },
+  { playerId: "p23", teamId: "team-6", tournamentId: "t1", slots: generateSlots([feb(4), feb(6), feb(10), feb(13), feb(16), feb(19)]) },
+  { playerId: "p24", teamId: "team-6", tournamentId: "t1", slots: generateSlots([feb(5), feb(8), feb(11), feb(14), feb(17), feb(20)]) },
+  // Team 7 - Vanguard FC
+  { playerId: "p25", teamId: "team-7", tournamentId: "t1", slots: generateSlots([feb(5), feb(7), feb(10), feb(12), feb(15), feb(18), feb(21)]) },
+  { playerId: "p26", teamId: "team-7", tournamentId: "t1", slots: generateSlots([feb(5), feb(8), feb(10), feb(13), feb(16), feb(19), feb(21)]) },
+  { playerId: "p27", teamId: "team-7", tournamentId: "t1", slots: generateSlots([feb(6), feb(9), feb(11), feb(14), feb(17), feb(20)]) },
+  { playerId: "p28", teamId: "team-7", tournamentId: "t1", slots: generateSlots([feb(7), feb(9), feb(12), feb(15), feb(18), feb(21)]) },
+  // Team 8 - Atlas Rangers
+  { playerId: "p29", teamId: "team-8", tournamentId: "t1", slots: generateSlots([feb(5), feb(7), feb(10), feb(13), feb(16), feb(19)]) },
+  { playerId: "p30", teamId: "team-8", tournamentId: "t1", slots: generateSlots([feb(6), feb(8), feb(11), feb(14), feb(17), feb(20)]) },
+  { playerId: "p31", teamId: "team-8", tournamentId: "t1", slots: generateSlots([feb(5), feb(8), feb(10), feb(13), feb(15), feb(18)]) },
+  { playerId: "p32", teamId: "team-8", tournamentId: "t1", slots: generateSlots([feb(7), feb(9), feb(12), feb(14), feb(17), feb(20)]) },
 ];
 
 export function getTeamById(teams: Team[], id: string): Team | undefined {

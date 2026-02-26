@@ -20,7 +20,7 @@ export default function TeamsPage({
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <h2 className="text-2xl font-bold">Tournament not found</h2>
-        <Link href="/" className="mt-4">
+        <Link href="/admin" className="mt-4">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard
@@ -33,7 +33,7 @@ export default function TeamsPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href={`/tournaments/${tournament.id}`}>
+        <Link href={`/admin/tournaments/${tournament.id}`}>
           <Button variant="ghost" size="sm" className="mb-2">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to {tournament.name}

@@ -6,6 +6,33 @@ export interface Player {
   number: number;
 }
 
+export interface TimeSlot {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface PlayerAvailability {
+  playerId: string;
+  teamId: string;
+  tournamentId: string;
+  slots: TimeSlot[];
+}
+
+export interface SuggestedMatch {
+  id: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  date: string;
+  time: string;
+  availableHomePlayers: number;
+  totalHomePlayers: number;
+  availableAwayPlayers: number;
+  totalAwayPlayers: number;
+  score: number;
+  group?: string;
+}
+
 export interface Team {
   id: string;
   name: string;

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Navbar } from "@/components/navbar";
 import { TournamentProvider } from "@/lib/context";
+import { PlayerProvider } from "@/lib/player-context";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -31,9 +31,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <TournamentProvider>
-          <Navbar />
-          <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
-          <Toaster />
+          <PlayerProvider>
+            {children}
+            <Toaster />
+          </PlayerProvider>
         </TournamentProvider>
       </body>
     </html>

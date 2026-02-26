@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TournamentCard } from "@/components/tournament-card";
 import { useTournaments } from "@/lib/context";
 
-export default function DashboardPage() {
+export default function AdminDashboardPage() {
   const { tournaments } = useTournaments();
 
   return (
@@ -18,7 +18,7 @@ export default function DashboardPage() {
             Manage your soccer tournaments, fixtures, and results.
           </p>
         </div>
-        <Link href="/tournaments/create">
+        <Link href="/admin/tournaments/create">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
             Create Tournament
@@ -32,7 +32,7 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Create your first tournament to get started.
           </p>
-          <Link href="/tournaments/create" className="mt-4">
+          <Link href="/admin/tournaments/create" className="mt-4">
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Create Tournament

@@ -70,7 +70,7 @@ export function TournamentForm() {
 
     addTournament(tournament);
     toast.success("Tournament created successfully!");
-    router.push("/");
+    router.push("/admin");
   }
 
   return (
@@ -180,7 +180,7 @@ export function TournamentForm() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/admin")}
             >
               Cancel
             </Button>

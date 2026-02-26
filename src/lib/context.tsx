@@ -7,11 +7,19 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { Tournament, Match, Team, Player } from "./types";
-import { initialTournaments } from "./data";
+import {
+  Tournament,
+  Match,
+  Team,
+  Player,
+  PlayerAvailability,
+  TimeSlot,
+} from "./types";
+import { initialTournaments, initialAvailability } from "./data";
 
 interface TournamentContextType {
   tournaments: Tournament[];
+  availability: PlayerAvailability[];
   addTournament: (t: Tournament) => void;
   updateTournament: (id: string, updates: Partial<Tournament>) => void;
   deleteTournament: (id: string) => void;
@@ -23,6 +31,17 @@ interface TournamentContextType {
     player: Player
   ) => void;
   addMatches: (tournamentId: string, matches: Match[]) => void;
+  setPlayerAvailability: (
+    playerId: string,
+    teamId: string,
+    tournamentId: string,
+    slots: TimeSlot[]
+  ) => void;
+  getTeamAvailabilityForDate: (
+    teamId: string,
+    tournamentId: string,
+    date: string
+  ) => { available: number; total: number; playerIds: string[] };
 }
 
 const TournamentContext = createContext<TournamentContextType | null>(null);
@@ -30,6 +49,8 @@ const TournamentContext = createContext<TournamentContextType | null>(null);
 export function TournamentProvider({ children }: { children: ReactNode }) {
   const [tournaments, setTournaments] =
     useState<Tournament[]>(initialTournaments);
+  const [availability, setAvailability] =
+    useState<PlayerAvailability[]>(initialAvailability);
 
   const addTournament = useCallback((t: Tournament) => {
     setTournaments((prev) => [...prev, t]);
@@ -99,10 +120,59 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setPlayerAvailability = useCallback(
+    (
+      playerId: string,
+      teamId: string,
+      tournamentId: string,
+      slots: TimeSlot[]
+    ) => {
+      setAvailability((prev) => {
+        const idx = prev.findIndex(
+          (a) => a.playerId === playerId && a.tournamentId === tournamentId
+        );
+        const entry: PlayerAvailability = {
+          playerId,
+          teamId,
+          tournamentId,
+          slots,
+        };
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = entry;
+          return next;
+        }
+        return [...prev, entry];
+      });
+    },
+    []
+  );
+
+  const getTeamAvailabilityForDate = useCallback(
+    (teamId: string, tournamentId: string, date: string) => {
+      const tournament = tournaments.find((t) => t.id === tournamentId);
+      const team = tournament?.teams.find((t) => t.id === teamId);
+      const total = team?.players.length ?? 0;
+
+      const teamAvail = availability.filter(
+        (a) => a.teamId === teamId && a.tournamentId === tournamentId
+      );
+      const playerIds: string[] = [];
+      for (const pa of teamAvail) {
+        if (pa.slots.some((s) => s.date === date)) {
+          playerIds.push(pa.playerId);
+        }
+      }
+      return { available: playerIds.length, total, playerIds };
+    },
+    [tournaments, availability]
+  );
+
   return (
     <TournamentContext.Provider
       value={{
         tournaments,
+        availability,
         addTournament,
         updateTournament,
         deleteTournament,
@@ -110,6 +180,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         addTeam,
         addPlayerToTeam,
         addMatches,
+        setPlayerAvailability,
+        getTeamAvailabilityForDate,
       }}
     >
       {children}
