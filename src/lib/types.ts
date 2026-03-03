@@ -1,92 +1,39 @@
-export interface Player {
+export type StaffRole = "head-coach" | "assistant-coach" | "volunteer" | "intern";
+
+export interface Staff {
   id: string;
   firstName: string;
   lastName: string;
-  position: string;
-  number: number;
+  role: StaffRole;
 }
 
-export interface TimeSlot {
+export type AvailabilityStatus = "available" | "unavailable" | "maybe" | "pending";
+
+export interface Availability {
+  staffId: string;
+  sessionId: string;
+  status: AvailabilityStatus;
+  customStartTime?: string;
+  customEndTime?: string;
+  notes?: string;
+}
+
+export interface Session {
+  id: string;
+  scheduleId: string;
   date: string;
+  dayOfWeek: string;
   startTime: string;
   endTime: string;
-}
-
-export interface PlayerAvailability {
-  playerId: string;
-  teamId: string;
-  tournamentId: string;
-  slots: TimeSlot[];
-}
-
-export interface SuggestedMatch {
-  id: string;
-  homeTeamId: string;
-  awayTeamId: string;
-  date: string;
-  time: string;
-  availableHomePlayers: number;
-  totalHomePlayers: number;
-  availableAwayPlayers: number;
-  totalAwayPlayers: number;
-  score: number;
-  group?: string;
-}
-
-export interface Team {
-  id: string;
-  name: string;
-  shortName: string;
-  color: string;
-  players: Player[];
-}
-
-export interface Match {
-  id: string;
-  tournamentId: string;
-  homeTeamId: string;
-  awayTeamId: string;
-  homeScore: number | null;
-  awayScore: number | null;
-  date: string;
-  time: string;
   location: string;
-  stage: "group" | "semi-final" | "final";
-  group?: string;
-  matchday?: number;
-  played: boolean;
+  requiredStaff: number;
 }
 
-export interface Group {
-  name: string;
-  teamIds: string[];
-}
-
-export interface Standing {
-  teamId: string;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
-}
-
-export type TournamentStatus = "upcoming" | "in_progress" | "completed";
-
-export interface Tournament {
+export interface Schedule {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   startDate: string;
   endDate: string;
-  location: string;
-  numberOfGroups: number;
-  teamsPerGroup: number;
-  status: TournamentStatus;
-  teams: Team[];
-  groups: Group[];
-  matches: Match[];
+  sessions: Session[];
 }

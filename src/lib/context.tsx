@@ -5,102 +5,164 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from "react";
-import {
-  Tournament,
-  Match,
-  Team,
-  Player,
-  PlayerAvailability,
-  TimeSlot,
+import type {
+  Staff,
+  Schedule,
+  Session,
+  Availability,
+  AvailabilityStatus,
+  StaffRole,
 } from "./types";
-import { initialTournaments, initialAvailability } from "./data";
+import { initialStaff, initialSchedules, initialAvailability } from "./data";
 
-interface TournamentContextType {
-  tournaments: Tournament[];
-  availability: PlayerAvailability[];
-  addTournament: (t: Tournament) => void;
-  updateTournament: (id: string, updates: Partial<Tournament>) => void;
-  deleteTournament: (id: string) => void;
-  updateMatch: (tournamentId: string, match: Match) => void;
-  addTeam: (tournamentId: string, team: Team) => void;
-  addPlayerToTeam: (
-    tournamentId: string,
-    teamId: string,
-    player: Player
+interface SchedulingContextType {
+  staff: Staff[];
+  schedules: Schedule[];
+  availability: Availability[];
+
+  addStaff: (s: Staff) => void;
+  updateStaff: (id: string, updates: Partial<Staff>) => void;
+  removeStaff: (id: string) => void;
+
+  addSchedule: (s: Schedule) => void;
+  updateSchedule: (id: string, updates: Partial<Schedule>) => void;
+  deleteSchedule: (id: string) => void;
+
+  addSession: (scheduleId: string, session: Session) => void;
+  addSessions: (scheduleId: string, sessions: Session[]) => void;
+  updateSession: (scheduleId: string, sessionId: string, updates: Partial<Session>) => void;
+  removeSession: (scheduleId: string, sessionId: string) => void;
+
+  setAvailability: (
+    staffId: string,
+    sessionId: string,
+    status: AvailabilityStatus,
+    customStartTime?: string,
+    customEndTime?: string,
+    notes?: string
   ) => void;
-  addMatches: (tournamentId: string, matches: Match[]) => void;
-  setPlayerAvailability: (
-    playerId: string,
-    teamId: string,
-    tournamentId: string,
-    slots: TimeSlot[]
-  ) => void;
-  getTeamAvailabilityForDate: (
-    teamId: string,
-    tournamentId: string,
-    date: string
-  ) => { available: number; total: number; playerIds: string[] };
+  removeAvailability: (staffId: string, sessionId: string) => void;
+  getAvailability: (staffId: string, sessionId: string) => Availability | undefined;
+  getSessionStaffCount: (sessionId: string) => { confirmed: number; maybe: number; total: number };
 }
 
-const TournamentContext = createContext<TournamentContextType | null>(null);
+const STORAGE_KEY = "hp-elite-scheduling";
 
-export function TournamentProvider({ children }: { children: ReactNode }) {
-  const [tournaments, setTournaments] =
-    useState<Tournament[]>(initialTournaments);
-  const [availability, setAvailability] =
-    useState<PlayerAvailability[]>(initialAvailability);
+const SchedulingContext = createContext<SchedulingContextType | null>(null);
 
-  const addTournament = useCallback((t: Tournament) => {
-    setTournaments((prev) => [...prev, t]);
+function loadFromStorage(): {
+  staff: Staff[];
+  schedules: Schedule[];
+  availability: Availability[];
+} | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveToStorage(data: {
+  staff: Staff[];
+  schedules: Schedule[];
+  availability: Availability[];
+}) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+export function SchedulingProvider({ children }: { children: ReactNode }) {
+  const [staff, setStaff] = useState<Staff[]>(initialStaff);
+  const [schedules, setSchedules] = useState<Schedule[]>(initialSchedules);
+  const [availability, setAvailability] = useState<Availability[]>(initialAvailability);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const stored = loadFromStorage();
+    if (stored) {
+      setStaff(stored.staff);
+      setSchedules(stored.schedules);
+      setAvailability(stored.availability);
+    }
+    setLoaded(true);
   }, []);
 
-  const updateTournament = useCallback(
-    (id: string, updates: Partial<Tournament>) => {
-      setTournaments((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-      );
-    },
-    []
-  );
+  useEffect(() => {
+    if (loaded) {
+      saveToStorage({ staff, schedules, availability });
+    }
+  }, [staff, schedules, availability, loaded]);
 
-  const deleteTournament = useCallback((id: string) => {
-    setTournaments((prev) => prev.filter((t) => t.id !== id));
+  const addStaff = useCallback((s: Staff) => {
+    setStaff((prev) => [...prev, s]);
   }, []);
 
-  const updateMatch = useCallback((tournamentId: string, match: Match) => {
-    setTournaments((prev) =>
-      prev.map((t) => {
-        if (t.id !== tournamentId) return t;
-        return {
-          ...t,
-          matches: t.matches.map((m) => (m.id === match.id ? match : m)),
-        };
+  const updateStaff = useCallback((id: string, updates: Partial<Staff>) => {
+    setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  }, []);
+
+  const removeStaff = useCallback((id: string) => {
+    setStaff((prev) => prev.filter((s) => s.id !== id));
+    setAvailability((prev) => prev.filter((a) => a.staffId !== id));
+  }, []);
+
+  const addSchedule = useCallback((s: Schedule) => {
+    setSchedules((prev) => [...prev, s]);
+  }, []);
+
+  const updateSchedule = useCallback((id: string, updates: Partial<Schedule>) => {
+    setSchedules((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+  }, []);
+
+  const deleteSchedule = useCallback((id: string) => {
+    setSchedules((prev) => {
+      const schedule = prev.find((s) => s.id === id);
+      if (schedule) {
+        const sessionIds = new Set(schedule.sessions.map((s) => s.id));
+        setAvailability((a) => a.filter((av) => !sessionIds.has(av.sessionId)));
+      }
+      return prev.filter((s) => s.id !== id);
+    });
+  }, []);
+
+  const addSession = useCallback((scheduleId: string, session: Session) => {
+    setSchedules((prev) =>
+      prev.map((s) => {
+        if (s.id !== scheduleId) return s;
+        return { ...s, sessions: [...s.sessions, session] };
       })
     );
   }, []);
 
-  const addTeam = useCallback((tournamentId: string, team: Team) => {
-    setTournaments((prev) =>
-      prev.map((t) => {
-        if (t.id !== tournamentId) return t;
-        return { ...t, teams: [...t.teams, team] };
+  const addSessions = useCallback((scheduleId: string, sessions: Session[]) => {
+    setSchedules((prev) =>
+      prev.map((s) => {
+        if (s.id !== scheduleId) return s;
+        return { ...s, sessions: [...s.sessions, ...sessions] };
       })
     );
   }, []);
 
-  const addPlayerToTeam = useCallback(
-    (tournamentId: string, teamId: string, player: Player) => {
-      setTournaments((prev) =>
-        prev.map((t) => {
-          if (t.id !== tournamentId) return t;
+  const updateSession = useCallback(
+    (scheduleId: string, sessionId: string, updates: Partial<Session>) => {
+      setSchedules((prev) =>
+        prev.map((s) => {
+          if (s.id !== scheduleId) return s;
           return {
-            ...t,
-            teams: t.teams.map((team) => {
-              if (team.id !== teamId) return team;
-              return { ...team, players: [...team.players, player] };
-            }),
+            ...s,
+            sessions: s.sessions.map((sess) =>
+              sess.id === sessionId ? { ...sess, ...updates } : sess
+            ),
           };
         })
       );
@@ -108,34 +170,36 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const addMatches = useCallback(
-    (tournamentId: string, matches: Match[]) => {
-      setTournaments((prev) =>
-        prev.map((t) => {
-          if (t.id !== tournamentId) return t;
-          return { ...t, matches: [...t.matches, ...matches] };
-        })
-      );
-    },
-    []
-  );
+  const removeSession = useCallback((scheduleId: string, sessionId: string) => {
+    setSchedules((prev) =>
+      prev.map((s) => {
+        if (s.id !== scheduleId) return s;
+        return { ...s, sessions: s.sessions.filter((sess) => sess.id !== sessionId) };
+      })
+    );
+    setAvailability((prev) => prev.filter((a) => a.sessionId !== sessionId));
+  }, []);
 
-  const setPlayerAvailability = useCallback(
+  const setAvailabilityFn = useCallback(
     (
-      playerId: string,
-      teamId: string,
-      tournamentId: string,
-      slots: TimeSlot[]
+      staffId: string,
+      sessionId: string,
+      status: AvailabilityStatus,
+      customStartTime?: string,
+      customEndTime?: string,
+      notes?: string
     ) => {
       setAvailability((prev) => {
         const idx = prev.findIndex(
-          (a) => a.playerId === playerId && a.tournamentId === tournamentId
+          (a) => a.staffId === staffId && a.sessionId === sessionId
         );
-        const entry: PlayerAvailability = {
-          playerId,
-          teamId,
-          tournamentId,
-          slots,
+        const entry: Availability = {
+          staffId,
+          sessionId,
+          status,
+          customStartTime,
+          customEndTime,
+          notes,
         };
         if (idx >= 0) {
           const next = [...prev];
@@ -148,50 +212,61 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const getTeamAvailabilityForDate = useCallback(
-    (teamId: string, tournamentId: string, date: string) => {
-      const tournament = tournaments.find((t) => t.id === tournamentId);
-      const team = tournament?.teams.find((t) => t.id === teamId);
-      const total = team?.players.length ?? 0;
+  const removeAvailability = useCallback((staffId: string, sessionId: string) => {
+    setAvailability((prev) =>
+      prev.filter((a) => !(a.staffId === staffId && a.sessionId === sessionId))
+    );
+  }, []);
 
-      const teamAvail = availability.filter(
-        (a) => a.teamId === teamId && a.tournamentId === tournamentId
+  const getAvailability = useCallback(
+    (staffId: string, sessionId: string) => {
+      return availability.find(
+        (a) => a.staffId === staffId && a.sessionId === sessionId
       );
-      const playerIds: string[] = [];
-      for (const pa of teamAvail) {
-        if (pa.slots.some((s) => s.date === date)) {
-          playerIds.push(pa.playerId);
-        }
-      }
-      return { available: playerIds.length, total, playerIds };
     },
-    [tournaments, availability]
+    [availability]
+  );
+
+  const getSessionStaffCount = useCallback(
+    (sessionId: string) => {
+      const sessionAvail = availability.filter((a) => a.sessionId === sessionId);
+      const confirmed = sessionAvail.filter((a) => a.status === "available").length;
+      const maybe = sessionAvail.filter((a) => a.status === "maybe").length;
+      return { confirmed, maybe, total: confirmed + maybe };
+    },
+    [availability]
   );
 
   return (
-    <TournamentContext.Provider
+    <SchedulingContext.Provider
       value={{
-        tournaments,
+        staff,
+        schedules,
         availability,
-        addTournament,
-        updateTournament,
-        deleteTournament,
-        updateMatch,
-        addTeam,
-        addPlayerToTeam,
-        addMatches,
-        setPlayerAvailability,
-        getTeamAvailabilityForDate,
+        addStaff,
+        updateStaff,
+        removeStaff,
+        addSchedule,
+        updateSchedule,
+        deleteSchedule,
+        addSession,
+        addSessions,
+        updateSession,
+        removeSession,
+        setAvailability: setAvailabilityFn,
+        removeAvailability,
+        getAvailability,
+        getSessionStaffCount,
       }}
     >
       {children}
-    </TournamentContext.Provider>
+    </SchedulingContext.Provider>
   );
 }
 
-export function useTournaments() {
-  const ctx = useContext(TournamentContext);
+export function useScheduling() {
+  const ctx = useContext(SchedulingContext);
   if (!ctx)
-    throw new Error("useTournaments must be used within TournamentProvider");
+    throw new Error("useScheduling must be used within SchedulingProvider");
   return ctx;
 }

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { TournamentProvider } from "@/lib/context";
-import { PlayerProvider } from "@/lib/player-context";
+import { SchedulingProvider } from "@/lib/context";
+import { StaffIdentityProvider } from "@/lib/staff-context";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tournament Manager",
-  description: "Soccer tournament management and fixtures system",
+  title: "HP Elite - Staff Scheduler",
+  description: "Football academy staff scheduling and availability management",
 };
 
 export default function RootLayout({
@@ -30,12 +30,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <TournamentProvider>
-          <PlayerProvider>
+        <SchedulingProvider>
+          <StaffIdentityProvider>
             {children}
             <Toaster />
-          </PlayerProvider>
-        </TournamentProvider>
+          </StaffIdentityProvider>
+        </SchedulingProvider>
       </body>
     </html>
   );
