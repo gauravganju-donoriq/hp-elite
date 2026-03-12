@@ -15,6 +15,8 @@ import type {
   Availability,
   AvailabilityStatus,
   StaffRole,
+  SessionSlot,
+  SlotType,
 } from "./types";
 import { initialStaff, initialSchedules, initialAvailability } from "./data";
 
@@ -22,6 +24,7 @@ interface SchedulingContextType {
   staff: Staff[];
   schedules: Schedule[];
   availability: Availability[];
+  sessionSlots: SessionSlot[];
 
   addStaff: (s: Staff) => void;
   updateStaff: (id: string, updates: Partial<Staff>) => void;
@@ -47,17 +50,27 @@ interface SchedulingContextType {
   removeAvailability: (staffId: string, sessionId: string) => void;
   getAvailability: (staffId: string, sessionId: string) => Availability | undefined;
   getSessionStaffCount: (sessionId: string) => { confirmed: number; maybe: number; total: number };
+
+  initializeSlotsForSession: (sessionId: string, count: number) => void;
+  setSlotType: (slotId: string, slotType: SlotType) => void;
+  assignStaffToSlot: (slotId: string, staffId: string) => void;
+  unassignSlot: (slotId: string) => void;
+  getSlotsForSession: (sessionId: string) => SessionSlot[];
+  autoAssignAll: (scheduleId: string) => { assigned: number; empty: number };
 }
 
 const STORAGE_KEY = "hp-elite-scheduling";
 
 const SchedulingContext = createContext<SchedulingContextType | null>(null);
 
-function loadFromStorage(): {
+interface StoredData {
   staff: Staff[];
   schedules: Schedule[];
   availability: Availability[];
-} | null {
+  sessionSlots?: SessionSlot[];
+}
+
+function loadFromStorage(): StoredData | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return JSON.parse(stored);
@@ -67,11 +80,7 @@ function loadFromStorage(): {
   return null;
 }
 
-function saveToStorage(data: {
-  staff: Staff[];
-  schedules: Schedule[];
-  availability: Availability[];
-}) {
+function saveToStorage(data: StoredData) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
@@ -83,6 +92,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<Staff[]>(initialStaff);
   const [schedules, setSchedules] = useState<Schedule[]>(initialSchedules);
   const [availability, setAvailability] = useState<Availability[]>(initialAvailability);
+  const [sessionSlots, setSessionSlots] = useState<SessionSlot[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -91,15 +101,16 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
       setStaff(stored.staff);
       setSchedules(stored.schedules);
       setAvailability(stored.availability);
+      if (stored.sessionSlots) setSessionSlots(stored.sessionSlots);
     }
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (loaded) {
-      saveToStorage({ staff, schedules, availability });
+      saveToStorage({ staff, schedules, availability, sessionSlots });
     }
-  }, [staff, schedules, availability, loaded]);
+  }, [staff, schedules, availability, sessionSlots, loaded]);
 
   const addStaff = useCallback((s: Staff) => {
     setStaff((prev) => [...prev, s]);
@@ -237,12 +248,155 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     [availability]
   );
 
+  const initializeSlotsForSession = useCallback(
+    (sessionId: string, count: number) => {
+      setSessionSlots((prev) => {
+        const existing = prev.filter((s) => s.sessionId === sessionId);
+        if (existing.length >= count) return prev;
+        const newSlots: SessionSlot[] = [];
+        for (let i = existing.length; i < count; i++) {
+          newSlots.push({
+            id: `slot-${sessionId}-${i}`,
+            sessionId,
+            slotIndex: i,
+          });
+        }
+        return [...prev, ...newSlots];
+      });
+    },
+    []
+  );
+
+  const setSlotTypeFn = useCallback((slotId: string, slotType: SlotType) => {
+    setSessionSlots((prev) =>
+      prev.map((s) => (s.id === slotId ? { ...s, slotType } : s))
+    );
+  }, []);
+
+  const assignStaffToSlot = useCallback((slotId: string, staffId: string) => {
+    setSessionSlots((prev) =>
+      prev.map((s) => (s.id === slotId ? { ...s, assignedStaffId: staffId } : s))
+    );
+  }, []);
+
+  const unassignSlot = useCallback((slotId: string) => {
+    setSessionSlots((prev) =>
+      prev.map((s) =>
+        s.id === slotId ? { ...s, assignedStaffId: undefined, slotType: undefined } : s
+      )
+    );
+  }, []);
+
+  const getSlotsForSession = useCallback(
+    (sessionId: string) => {
+      return sessionSlots
+        .filter((s) => s.sessionId === sessionId)
+        .sort((a, b) => a.slotIndex - b.slotIndex);
+    },
+    [sessionSlots]
+  );
+
+  const ROLE_PRIORITY: Record<StaffRole, number> = {
+    "head-coach": 0,
+    "assistant-coach": 1,
+    volunteer: 2,
+    intern: 3,
+  };
+
+  const autoAssignAll = useCallback(
+    (scheduleId: string) => {
+      const schedule = schedules.find((s) => s.id === scheduleId);
+      if (!schedule) return { assigned: 0, empty: 0 };
+
+      const assignmentCounts = new Map<string, number>();
+      for (const slot of sessionSlots) {
+        if (slot.assignedStaffId) {
+          assignmentCounts.set(
+            slot.assignedStaffId,
+            (assignmentCounts.get(slot.assignedStaffId) || 0) + 1
+          );
+        }
+      }
+
+      let totalAssigned = 0;
+      let totalEmpty = 0;
+
+      setSessionSlots((prev) => {
+        const next = [...prev];
+
+        for (const session of schedule.sessions) {
+          const sessionSlotIdxs: number[] = [];
+          for (let i = 0; i < next.length; i++) {
+            if (next[i].sessionId === session.id) sessionSlotIdxs.push(i);
+          }
+
+          if (sessionSlotIdxs.length < session.requiredStaff) {
+            for (let i = sessionSlotIdxs.length; i < session.requiredStaff; i++) {
+              const newSlot: SessionSlot = {
+                id: `slot-${session.id}-${i}`,
+                sessionId: session.id,
+                slotIndex: i,
+              };
+              next.push(newSlot);
+              sessionSlotIdxs.push(next.length - 1);
+            }
+          }
+
+          const alreadyAssigned = new Set<string>();
+          for (const idx of sessionSlotIdxs) {
+            if (next[idx].assignedStaffId) alreadyAssigned.add(next[idx].assignedStaffId!);
+          }
+
+          const availableStaff = staff
+            .filter((member) => {
+              if (alreadyAssigned.has(member.id)) return false;
+              const avail = availability.find(
+                (a) => a.staffId === member.id && a.sessionId === session.id
+              );
+              return avail?.status === "available";
+            })
+            .sort((a, b) => {
+              const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
+              if (roleDiff !== 0) return roleDiff;
+              return (assignmentCounts.get(a.id) || 0) - (assignmentCounts.get(b.id) || 0);
+            });
+
+          let staffIdx = 0;
+          for (const slotIdx of sessionSlotIdxs) {
+            if (next[slotIdx].assignedStaffId) continue;
+            if (staffIdx < availableStaff.length) {
+              next[slotIdx] = {
+                ...next[slotIdx],
+                assignedStaffId: availableStaff[staffIdx].id,
+                slotType: next[slotIdx].slotType || "general",
+              };
+              assignmentCounts.set(
+                availableStaff[staffIdx].id,
+                (assignmentCounts.get(availableStaff[staffIdx].id) || 0) + 1
+              );
+              totalAssigned++;
+              staffIdx++;
+            } else {
+              totalEmpty++;
+            }
+          }
+        }
+
+        return next;
+      });
+
+      return { assigned: totalAssigned, empty: totalEmpty };
+    },
+    [schedules, staff, availability, sessionSlots]
+  );
+
   return (
     <SchedulingContext.Provider
       value={{
         staff,
         schedules,
         availability,
+        sessionSlots,
         addStaff,
         updateStaff,
         removeStaff,
@@ -257,6 +411,12 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         removeAvailability,
         getAvailability,
         getSessionStaffCount,
+        initializeSlotsForSession,
+        setSlotType: setSlotTypeFn,
+        assignStaffToSlot,
+        unassignSlot,
+        getSlotsForSession,
+        autoAssignAll,
       }}
     >
       {children}

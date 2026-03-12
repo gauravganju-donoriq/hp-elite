@@ -3,9 +3,8 @@
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useScheduling } from "@/lib/context";
-import { AvailabilityGrid } from "@/components/availability-grid";
+import { SessionSlotsPanel } from "@/components/session-slots-panel";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -20,7 +19,6 @@ import {
   Trash2,
   Users,
   CheckCircle2,
-  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,7 +38,7 @@ export default function ScheduleDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { schedules, availability, deleteSchedule, staff } = useScheduling();
+  const { schedules, availability, deleteSchedule, sessionSlots } = useScheduling();
 
   const schedule = schedules.find((s) => s.id === id);
   if (!schedule) {
@@ -56,22 +54,21 @@ export default function ScheduleDetailPage({
 
   const totalSessions = schedule.sessions.length;
   let totalRequired = 0;
-  let totalConfirmed = 0;
-  let totalMaybe = 0;
+  let totalAssigned = 0;
+  let totalAvailable = 0;
   let understaffedCount = 0;
-  let pendingResponses = 0;
 
   for (const session of schedule.sessions) {
     totalRequired += session.requiredStaff;
-    const sessionAvail = availability.filter((a) => a.sessionId === session.id);
-    const confirmed = sessionAvail.filter((a) => a.status === "available").length;
-    const maybe = sessionAvail.filter((a) => a.status === "maybe").length;
-    totalConfirmed += confirmed;
-    totalMaybe += maybe;
-    if (confirmed < session.requiredStaff) understaffedCount++;
+    const slots = sessionSlots.filter((s) => s.sessionId === session.id);
+    const assigned = slots.filter((s) => s.assignedStaffId).length;
+    totalAssigned += assigned;
 
-    const responded = sessionAvail.length;
-    pendingResponses += staff.length - responded;
+    const sessionAvail = availability.filter((a) => a.sessionId === session.id);
+    const available = sessionAvail.filter((a) => a.status === "available").length;
+    totalAvailable += available;
+
+    if (assigned < session.requiredStaff) understaffedCount++;
   }
 
   function handleDelete() {
@@ -127,12 +124,12 @@ export default function ScheduleDetailPage({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              Confirmed
+              Assigned
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {totalConfirmed}
+              {totalAssigned}
               <span className="text-sm font-normal text-muted-foreground">
                 /{totalRequired}
               </span>
@@ -142,19 +139,19 @@ export default function ScheduleDetailPage({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <HelpCircle className="h-3.5 w-3.5 text-yellow-600" />
-              Maybe
+              <Users className="h-3.5 w-3.5 text-blue-600" />
+              Available
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{totalMaybe}</div>
+            <div className="text-2xl font-bold text-blue-600">{totalAvailable}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
-              Under-staffed
+              Needs Staff
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -168,30 +165,7 @@ export default function ScheduleDetailPage({
         </Card>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-semibold">Availability Grid</h2>
-          <div className="flex items-center gap-3 text-xs">
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-green-100 border border-green-300" />
-              Yes
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-red-100 border border-red-300" />
-              No
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-yellow-100 border border-yellow-300" />
-              Maybe
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-gray-100 border border-gray-300" />
-              Pending
-            </span>
-          </div>
-        </div>
-        <AvailabilityGrid schedule={schedule} />
-      </div>
+      <SessionSlotsPanel schedule={schedule} />
     </div>
   );
 }
