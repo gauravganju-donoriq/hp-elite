@@ -64,6 +64,51 @@ function makeSession(
   };
 }
 
+interface SessionPattern {
+  startTime: string;
+  endTime: string;
+  location: string;
+  requiredStaff: number;
+}
+
+const dayPatterns: Record<number, SessionPattern[]> = {
+  0: [ // Sunday
+    { startTime: "9:00 AM", endTime: "10:00 AM", location: "Field House", requiredStaff: 3 },
+    { startTime: "10:00 AM", endTime: "11:00 AM", location: "Field House", requiredStaff: 3 },
+    { startTime: "11:00 AM", endTime: "1:00 PM", location: "Field House", requiredStaff: 5 },
+  ],
+  1: [ // Monday
+    { startTime: "4:00 PM", endTime: "5:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "5:00 PM", endTime: "6:25 PM", location: "Field House", requiredStaff: 4 },
+    { startTime: "6:30 PM", endTime: "8:00 PM", location: "Field House", requiredStaff: 4 },
+  ],
+  2: [ // Tuesday
+    { startTime: "4:00 PM", endTime: "5:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "5:00 PM", endTime: "6:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "6:00 PM", endTime: "7:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "7:00 PM", endTime: "8:00 PM", location: "Field House", requiredStaff: 3 },
+  ],
+  3: [ // Wednesday
+    { startTime: "4:00 PM", endTime: "5:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "5:00 PM", endTime: "6:25 PM", location: "Field House", requiredStaff: 4 },
+    { startTime: "6:30 PM", endTime: "8:00 PM", location: "Field House", requiredStaff: 4 },
+  ],
+  4: [ // Thursday
+    { startTime: "4:00 PM", endTime: "5:00 PM", location: "Field House", requiredStaff: 2 },
+    { startTime: "5:00 PM", endTime: "6:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "6:00 PM", endTime: "8:00 PM", location: "Field House", requiredStaff: 3 },
+  ],
+  5: [ // Friday
+    { startTime: "4:00 PM", endTime: "5:00 PM", location: "Field House", requiredStaff: 3 },
+    { startTime: "5:00 PM", endTime: "6:25 PM", location: "Field House", requiredStaff: 4 },
+  ],
+  6: [ // Saturday
+    { startTime: "9:00 AM", endTime: "10:00 AM", location: "K Sport", requiredStaff: 2 },
+    { startTime: "10:00 AM", endTime: "11:00 AM", location: "K Sport", requiredStaff: 2 },
+    { startTime: "11:00 AM", endTime: "12:00 PM", location: "K Sport", requiredStaff: 2 },
+  ],
+};
+
 function generateWeeklySessions(
   scheduleId: string,
   startDate: string,
@@ -80,19 +125,19 @@ function generateWeeklySessions(
       current.setDate(current.getDate() + w * 7 + d);
       const dateStr = current.toISOString().split("T")[0];
       const dayOfWeek = current.getDay();
+      const patterns = dayPatterns[dayOfWeek] || [];
 
-      if (dayOfWeek === 0) {
+      for (const pattern of patterns) {
         sessions.push(
-          makeSession(`sess-${counter++}`, scheduleId, dateStr, "9:00 AM", "1:00 PM", "Field House", 11)
-        );
-      } else if (dayOfWeek === 6) {
-        sessions.push(
-          makeSession(`sess-${counter++}`, scheduleId, dateStr, "5:00 PM", "8:00 PM", "K Sport", 4)
-        );
-      } else {
-        const required = dayOfWeek === 4 ? 5 : dayOfWeek === 1 ? 10 : dayOfWeek === 3 ? 9 : dayOfWeek === 5 ? 9 : 8;
-        sessions.push(
-          makeSession(`sess-${counter++}`, scheduleId, dateStr, "5:00 PM", "8:00 PM", "Field House", required)
+          makeSession(
+            `sess-${counter++}`,
+            scheduleId,
+            dateStr,
+            pattern.startTime,
+            pattern.endTime,
+            pattern.location,
+            pattern.requiredStaff
+          )
         );
       }
     }
@@ -120,9 +165,11 @@ function av(staffId: string, sessionId: string, status: Availability["status"]):
 
 function buildAvailability(): Availability[] {
   const entries: Availability[] = [];
-  const sessionsByDate = new Map<string, Session>();
+  const sessionsByDate = new Map<string, Session[]>();
   for (const s of febSessions) {
-    sessionsByDate.set(s.date, s);
+    const existing = sessionsByDate.get(s.date) || [];
+    existing.push(s);
+    sessionsByDate.set(s.date, existing);
   }
 
   const staffAvailMap: Record<string, Record<string, Availability["status"]>> = {
@@ -137,12 +184,12 @@ function buildAvailability(): Availability[] {
     s22: { "2026-02-02": "available", "2026-02-03": "available", "2026-02-04": "available", "2026-02-05": "available", "2026-02-06": "available", "2026-02-07": "available", "2026-02-08": "available" },
     s23: { "2026-02-02": "unavailable", "2026-02-07": "available" },
     s27: { "2026-02-02": "available", "2026-02-03": "available", "2026-02-04": "available", "2026-02-05": "available", "2026-02-06": "available", "2026-02-07": "available", "2026-02-08": "available" },
-    s6: { "2026-02-02": "available", "2026-02-03": "available", "2026-02-04": "available", "2026-02-06": "available", "2026-02-09": "available", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "available", "2026-02-13": "available", "2026-02-16": "available", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "available", "2026-02-20": "available", "2026-02-23": "available", "2026-02-24": "unavailable", "2026-02-25": "available", "2026-02-26": "available", "2026-02-07": "unavailable", "2026-02-08": "unavailable", "2026-02-14": "unavailable", "2026-02-15": "unavailable", "2026-02-21": "unavailable", "2026-02-22": "unavailable", "2026-02-27": "unavailable", "2026-02-28": "unavailable" },
+    s6: { "2026-02-02": "available", "2026-02-03": "available", "2026-02-04": "available", "2026-02-06": "available", "2026-02-09": "available", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "available", "2026-02-13": "available", "2026-02-16": "available", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "available", "2026-02-20": "available", "2026-02-23": "available", "2026-02-24": "unavailable", "2026-02-25": "available", "2026-02-26": "available" },
     s21: { "2026-02-02": "available", "2026-02-03": "available", "2026-02-04": "available", "2026-02-06": "available", "2026-02-07": "available", "2026-02-08": "available", "2026-02-09": "available", "2026-02-10": "unavailable", "2026-02-11": "available", "2026-02-12": "unavailable", "2026-02-13": "available", "2026-02-14": "available" },
     s9: { "2026-02-02": "unavailable", "2026-02-03": "available", "2026-02-04": "unavailable", "2026-02-06": "available", "2026-02-08": "available" },
     s25: { "2026-02-02": "unavailable", "2026-02-03": "available", "2026-02-04": "available", "2026-02-05": "unavailable", "2026-02-06": "available" },
-    s20: { "2026-02-02": "available", "2026-02-04": "available", "2026-02-07": "available", "2026-02-08": "available", "2026-02-09": "available", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "unavailable", "2026-02-13": "unavailable", "2026-02-16": "available", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "available", "2026-02-20": "available", "2026-02-21": "unavailable", "2026-02-22": "unavailable" },
-    s14: { "2026-02-02": "available", "2026-02-09": "unavailable", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "unavailable", "2026-02-13": "available", "2026-02-14": "unavailable", "2026-02-15": "unavailable", "2026-02-16": "unavailable", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "unavailable", "2026-02-20": "available", "2026-02-21": "unavailable", "2026-02-22": "unavailable", "2026-02-23": "unavailable", "2026-02-24": "available", "2026-02-25": "available", "2026-02-26": "unavailable", "2026-02-27": "available", "2026-02-28": "unavailable", "2026-03-01": "unavailable", "2026-03-02": "unavailable", "2026-03-03": "available", "2026-03-04": "available", "2026-03-05": "unavailable", "2026-03-06": "available", "2026-03-07": "unavailable", "2026-03-08": "unavailable" },
+    s20: { "2026-02-02": "available", "2026-02-04": "available", "2026-02-07": "available", "2026-02-08": "available", "2026-02-09": "available", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "unavailable", "2026-02-13": "unavailable", "2026-02-16": "available", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "available", "2026-02-20": "available" },
+    s14: { "2026-02-02": "available", "2026-02-09": "unavailable", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "unavailable", "2026-02-13": "available", "2026-02-14": "unavailable", "2026-02-15": "unavailable", "2026-02-16": "unavailable", "2026-02-17": "available", "2026-02-18": "available", "2026-02-19": "unavailable", "2026-02-20": "available", "2026-02-23": "unavailable", "2026-02-24": "available", "2026-02-25": "available", "2026-02-26": "unavailable", "2026-02-27": "available", "2026-03-03": "available", "2026-03-04": "available", "2026-03-05": "unavailable", "2026-03-06": "available" },
     s3: { "2026-02-02": "unavailable", "2026-02-03": "available" },
     s17: { "2026-02-02": "unavailable", "2026-02-03": "unavailable" },
     s5: { "2026-02-07": "available", "2026-02-08": "available", "2026-02-09": "available", "2026-02-10": "available", "2026-02-11": "available", "2026-02-12": "available", "2026-02-13": "available", "2026-02-14": "available", "2026-02-15": "available", "2026-02-16": "available" },
@@ -154,8 +201,8 @@ function buildAvailability(): Availability[] {
 
   for (const [staffId, dateMap] of Object.entries(staffAvailMap)) {
     for (const [date, status] of Object.entries(dateMap)) {
-      const session = sessionsByDate.get(date);
-      if (session) {
+      const dateSessions = sessionsByDate.get(date) || [];
+      for (const session of dateSessions) {
         entries.push(av(staffId, session.id, status));
       }
     }

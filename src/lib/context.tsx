@@ -16,7 +16,6 @@ import type {
   AvailabilityStatus,
   StaffRole,
   SessionSlot,
-  SlotType,
 } from "./types";
 import { initialStaff, initialSchedules, initialAvailability } from "./data";
 
@@ -52,7 +51,6 @@ interface SchedulingContextType {
   getSessionStaffCount: (sessionId: string) => { confirmed: number; maybe: number; total: number };
 
   initializeSlotsForSession: (sessionId: string, count: number) => void;
-  setSlotType: (slotId: string, slotType: SlotType) => void;
   assignStaffToSlot: (slotId: string, staffId: string) => void;
   unassignSlot: (slotId: string) => void;
   getSlotsForSession: (sessionId: string) => SessionSlot[];
@@ -251,27 +249,31 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   const initializeSlotsForSession = useCallback(
     (sessionId: string, count: number) => {
       setSessionSlots((prev) => {
-        const existing = prev.filter((s) => s.sessionId === sessionId);
-        if (existing.length >= count) return prev;
-        const newSlots: SessionSlot[] = [];
-        for (let i = existing.length; i < count; i++) {
-          newSlots.push({
-            id: `slot-${sessionId}-${i}`,
-            sessionId,
-            slotIndex: i,
-          });
+        const forSession = prev
+          .filter((s) => s.sessionId === sessionId)
+          .sort((a, b) => a.slotIndex - b.slotIndex);
+        const others = prev.filter((s) => s.sessionId !== sessionId);
+
+        if (forSession.length === count) return prev;
+
+        if (forSession.length < count) {
+          const newSlots: SessionSlot[] = [];
+          for (let i = forSession.length; i < count; i++) {
+            newSlots.push({
+              id: `slot-${sessionId}-${i}`,
+              sessionId,
+              slotIndex: i,
+            });
+          }
+          return [...prev, ...newSlots];
         }
-        return [...prev, ...newSlots];
+
+        const kept = forSession.slice(0, count);
+        return [...others, ...kept];
       });
     },
     []
   );
-
-  const setSlotTypeFn = useCallback((slotId: string, slotType: SlotType) => {
-    setSessionSlots((prev) =>
-      prev.map((s) => (s.id === slotId ? { ...s, slotType } : s))
-    );
-  }, []);
 
   const assignStaffToSlot = useCallback((slotId: string, staffId: string) => {
     setSessionSlots((prev) =>
@@ -282,7 +284,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   const unassignSlot = useCallback((slotId: string) => {
     setSessionSlots((prev) =>
       prev.map((s) =>
-        s.id === slotId ? { ...s, assignedStaffId: undefined, slotType: undefined } : s
+        s.id === slotId ? { ...s, assignedStaffId: undefined } : s
       )
     );
   }, []);
@@ -368,7 +370,6 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
               next[slotIdx] = {
                 ...next[slotIdx],
                 assignedStaffId: availableStaff[staffIdx].id,
-                slotType: next[slotIdx].slotType || "general",
               };
               assignmentCounts.set(
                 availableStaff[staffIdx].id,
@@ -412,7 +413,6 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         getAvailability,
         getSessionStaffCount,
         initializeSlotsForSession,
-        setSlotType: setSlotTypeFn,
         assignStaffToSlot,
         unassignSlot,
         getSlotsForSession,

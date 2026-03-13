@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Check, ChevronRight, User, X } from "lucide-react";
+import { Check, User, X } from "lucide-react";
 
 export const SLOT_TYPE_CONFIG: Record<
   SlotType,
@@ -73,12 +73,10 @@ export function SlotAssignmentPopover({
     staff,
     availability,
     sessionSlots,
-    setSlotType,
     assignStaffToSlot,
     unassignSlot,
   } = useScheduling();
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<"type" | "staff">(slot.slotType ? "staff" : "type");
 
   const alreadyAssignedInSession = new Set(
     allSlots
@@ -119,29 +117,14 @@ export function SlotAssignmentPopover({
       );
     });
 
-  function handleSelectType(type: SlotType) {
-    setSlotType(slot.id, type);
-    setStep("staff");
-  }
-
   function handleAssign(staffId: string) {
-    if (!slot.slotType) {
-      setSlotType(slot.id, "general");
-    }
     assignStaffToSlot(slot.id, staffId);
     setOpen(false);
   }
 
   function handleClear() {
     unassignSlot(slot.id);
-    setStep("type");
-  }
-
-  function handleOpenChange(isOpen: boolean) {
-    setOpen(isOpen);
-    if (isOpen) {
-      setStep(slot.slotType ? "staff" : "type");
-    }
+    setOpen(false);
   }
 
   const STATUS_BADGE: Record<string, string> = {
@@ -152,132 +135,75 @@ export function SlotAssignmentPopover({
   };
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
-        {step === "type" ? (
-          <div className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Select Slot Type</p>
-              {slot.slotType && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs px-2"
-                  onClick={() => setStep("staff")}
-                >
-                  Skip <ChevronRight className="h-3 w-3 ml-1" />
-                </Button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-1 max-h-64 overflow-y-auto">
-              {(Object.entries(SLOT_TYPE_CONFIG) as [SlotType, { label: string; color: string }][]).map(
-                ([type, config]) => (
-                  <button
-                    key={type}
-                    onClick={() => handleSelectType(type)}
-                    className={cn(
-                      "text-left text-xs px-2 py-1.5 rounded border transition-colors",
-                      slot.slotType === type
-                        ? "ring-2 ring-ring"
-                        : "hover:bg-accent",
-                      config.color
-                    )}
-                  >
-                    {config.label}
-                  </button>
-                )
-              )}
-            </div>
+      <PopoverContent className="w-64 p-0" align="start">
+        <div className="space-y-0">
+          <div className="p-3 pb-2 border-b flex items-center justify-between">
+            <p className="text-sm font-medium">Assign Staff</p>
+            {slot.assignedStaffId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs px-2 text-destructive"
+                onClick={handleClear}
+              >
+                <X className="h-3 w-3 mr-1" /> Remove
+              </Button>
+            )}
           </div>
-        ) : (
-          <div className="space-y-0">
-            <div className="p-3 pb-2 border-b space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Assign Staff</p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs px-2"
-                    onClick={() => setStep("type")}
-                  >
-                    Change Type
-                  </Button>
-                  {slot.assignedStaffId && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs px-2 text-destructive"
-                      onClick={handleClear}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+          <div className="max-h-64 overflow-y-auto">
+            {recommendedStaff.map(({ member, status }) => {
+              const isAssigned = slot.assignedStaffId === member.id;
+              const count = assignmentCounts.get(member.id) || 0;
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => handleAssign(member.id)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                    isAssigned && "bg-accent"
                   )}
-                </div>
-              </div>
-              {slot.slotType && (
-                <Badge
-                  variant="outline"
-                  className={cn("text-[10px]", SLOT_TYPE_CONFIG[slot.slotType].color)}
                 >
-                  {SLOT_TYPE_CONFIG[slot.slotType].label}
-                </Badge>
-              )}
-            </div>
-            <div className="max-h-64 overflow-y-auto">
-              {recommendedStaff.map(({ member, status }) => {
-                const isAssigned = slot.assignedStaffId === member.id;
-                const count = assignmentCounts.get(member.id) || 0;
-                return (
-                  <button
-                    key={member.id}
-                    onClick={() => handleAssign(member.id)}
-                    className={cn(
-                      "w-full flex items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                      isAssigned && "bg-accent"
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isAssigned ? (
+                      <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                    ) : (
+                      <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {isAssigned ? (
-                        <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                      ) : (
-                        <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">
+                      {member.firstName} {member.lastName}
+                    </span>
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+                      {ROLE_LABELS[member.role]}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <span
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded",
+                        STATUS_BADGE[status]
                       )}
-                      <span className="truncate">
-                        {member.firstName} {member.lastName}
+                    >
+                      {status === "available"
+                        ? "Yes"
+                        : status === "maybe"
+                          ? "Maybe"
+                          : status === "unavailable"
+                            ? "No"
+                            : "--"}
+                    </span>
+                    {count > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ({count})
                       </span>
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-                        {ROLE_LABELS[member.role]}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      <span
-                        className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded",
-                          STATUS_BADGE[status]
-                        )}
-                      >
-                        {status === "available"
-                          ? "Yes"
-                          : status === "maybe"
-                            ? "Maybe"
-                            : status === "unavailable"
-                              ? "No"
-                              : "--"}
-                      </span>
-                      {count > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
-                          ({count})
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
       </PopoverContent>
     </Popover>
   );

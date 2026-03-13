@@ -27,6 +27,7 @@ export interface Session {
   endTime: string;
   location: string;
   requiredStaff: number;
+  classType?: SlotType;
 }
 
 export interface Schedule {
@@ -60,6 +61,5 @@ export interface SessionSlot {
   id: string;
   sessionId: string;
   slotIndex: number;
-  slotType?: SlotType;
   assignedStaffId?: string;
 }
