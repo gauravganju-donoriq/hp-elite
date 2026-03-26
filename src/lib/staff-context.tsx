@@ -5,56 +5,81 @@ import {
   useContext,
   useState,
   useCallback,
-  useEffect,
+  useMemo,
   type ReactNode,
 } from "react";
-
-interface StaffIdentity {
-  staffId: string;
-}
+import { authClient } from "./auth-client";
+import type { Staff } from "./types";
 
 interface StaffIdentityContextType {
-  identity: StaffIdentity | null;
-  setIdentity: (identity: StaffIdentity) => void;
+  identity: { staffId: string } | null;
+  staffRecord: Staff | null;
+  isAdmin: boolean;
+  userName: string | null;
+  userEmail: string | null;
+  loading: boolean;
   clearIdentity: () => void;
 }
 
 const StaffIdentityContext = createContext<StaffIdentityContextType | null>(null);
 
-const STORAGE_KEY = "hp-elite-staff-identity";
+function useStaffFromApi(userId: string | undefined) {
+  const [staffRecord, setStaffRecord] = useState<Staff | null>(null);
+  const [fetched, setFetched] = useState(false);
+  const [fetchedFor, setFetchedFor] = useState<string | undefined>(undefined);
+
+  if (userId && userId !== fetchedFor) {
+    setFetchedFor(userId);
+    setFetched(false);
+    fetch("/api/staff/me")
+      .then((res) => res.json())
+      .then((data) => {
+        setStaffRecord(data);
+        setFetched(true);
+      })
+      .catch(() => {
+        setStaffRecord(null);
+        setFetched(true);
+      });
+  } else if (!userId && fetchedFor) {
+    setFetchedFor(undefined);
+    setStaffRecord(null);
+    setFetched(true);
+  }
+
+  return { staffRecord, loading: userId ? !fetched : false };
+}
 
 export function StaffIdentityProvider({ children }: { children: ReactNode }) {
-  const [identity, setIdentityState] = useState<StaffIdentity | null>(null);
+  const { data: session, isPending } = authClient.useSession();
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setIdentityState(JSON.parse(stored));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const setIdentity = useCallback((id: StaffIdentity) => {
-    setIdentityState(id);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(id));
-    } catch {
-      // ignore
-    }
-  }, []);
+  const userId = session?.user?.id;
+  const { staffRecord, loading: staffLoading } = useStaffFromApi(userId);
 
   const clearIdentity = useCallback(() => {
-    setIdentityState(null);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    authClient.signOut();
   }, []);
 
+  const isAdmin = session?.user?.role === "admin";
+  const userName = session?.user?.name ?? null;
+  const userEmail = session?.user?.email ?? null;
+  const loading = isPending || staffLoading;
+
+  const value = useMemo(
+    () => ({
+      identity: staffRecord ? { staffId: staffRecord.id } : null,
+      staffRecord,
+      isAdmin,
+      userName,
+      userEmail,
+      loading,
+      clearIdentity,
+    }),
+    [staffRecord, isAdmin, userName, userEmail, loading, clearIdentity]
+  );
+
   return (
-    <StaffIdentityContext.Provider value={{ identity, setIdentity, clearIdentity }}>
+    <StaffIdentityContext.Provider value={value}>
       {children}
     </StaffIdentityContext.Provider>
   );

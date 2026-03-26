@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useScheduling } from "@/lib/context";
-import type { Schedule, Session, SessionSlot, SlotType } from "@/lib/types";
+import type { Schedule, Session, SessionSlot, SlotType, AutoAssignConflict } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import {
   SlotAssignmentPopover,
   SLOT_TYPE_CONFIG,
@@ -12,9 +13,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Minus, Plus, Settings2, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function SlotChip({
@@ -62,9 +75,12 @@ function SessionConfigPopover({
   schedule: Schedule;
   children: React.ReactNode;
 }) {
-  const { updateSession, initializeSlotsForSession } = useScheduling();
+  const { updateSession, removeSession, initializeSlotsForSession } = useScheduling();
   const [open, setOpen] = useState(false);
   const [staffCount, setStaffCount] = useState(session.requiredStaff);
+  const [startTime, setStartTime] = useState(session.startTime);
+  const [endTime, setEndTime] = useState(session.endTime);
+  const [location, setLocation] = useState(session.location);
 
   function handleSelectType(type: SlotType) {
     updateSession(schedule.id, session.id, { classType: type });
@@ -79,13 +95,35 @@ function SessionConfigPopover({
 
   function handleOpenChange(isOpen: boolean) {
     setOpen(isOpen);
-    if (isOpen) setStaffCount(session.requiredStaff);
+    if (isOpen) {
+      setStaffCount(session.requiredStaff);
+      setStartTime(session.startTime);
+      setEndTime(session.endTime);
+      setLocation(session.location);
+    }
+  }
+
+  function handleSaveDetails() {
+    const updates: Partial<Session> = {};
+    if (startTime !== session.startTime) updates.startTime = startTime;
+    if (endTime !== session.endTime) updates.endTime = endTime;
+    if (location !== session.location) updates.location = location;
+    if (Object.keys(updates).length > 0) {
+      updateSession(schedule.id, session.id, updates);
+      toast.success("Session updated.");
+    }
+  }
+
+  function handleDeleteSession() {
+    removeSession(schedule.id, session.id);
+    toast.success("Session deleted.");
+    setOpen(false);
   }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="start">
         <div className="p-3 space-y-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">
@@ -142,6 +180,62 @@ function SessionConfigPopover({
               </Button>
             </div>
           </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Session Details
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[10px]">Start Time</Label>
+                <Input
+                  className="h-7 text-xs"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  placeholder="5:00 PM"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px]">End Time</Label>
+                <Input
+                  className="h-7 text-xs"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  placeholder="8:00 PM"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px]">Location</Label>
+              <Input
+                className="h-7 text-xs"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Field House"
+              />
+            </div>
+            <Button
+              size="sm"
+              className="w-full h-7 text-xs"
+              onClick={handleSaveDetails}
+            >
+              Save Details
+            </Button>
+          </div>
+
+          <Separator />
+
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full h-7 text-xs"
+            onClick={handleDeleteSession}
+          >
+            <Trash2 className="h-3 w-3 mr-1" />
+            Delete Session
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -159,13 +253,209 @@ function formatDayLabel(dateStr: string) {
   };
 }
 
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function AddSessionDialog({ schedule }: { schedule: Schedule }) {
+  const { addSession } = useScheduling();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("5:00 PM");
+  const [endTime, setEndTime] = useState("8:00 PM");
+  const [location, setLocation] = useState("Field House");
+  const [requiredStaff, setRequiredStaff] = useState(8);
+
+  function handleOpen(isOpen: boolean) {
+    setOpen(isOpen);
+    if (isOpen) {
+      setDate("");
+      setStartTime("5:00 PM");
+      setEndTime("8:00 PM");
+      setLocation("Field House");
+      setRequiredStaff(8);
+    }
+  }
+
+  function handleAdd() {
+    if (!date) {
+      toast.error("Please select a date.");
+      return;
+    }
+    const d = new Date(date + "T12:00:00");
+    const dayOfWeek = DAYS[d.getDay()];
+    const session: Session = {
+      id: `sess-${schedule.id}-${Date.now()}`,
+      scheduleId: schedule.id,
+      date,
+      dayOfWeek,
+      startTime,
+      endTime,
+      location,
+      requiredStaff,
+    };
+    addSession(schedule.id, session);
+    toast.success("Session added.");
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <CalendarPlus className="h-4 w-4 mr-1" />
+          Add Session
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Session</DialogTitle>
+          <DialogDescription>
+            Add a new training session to this schedule.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="add-sess-date">Date *</Label>
+            <Input
+              id="add-sess-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              min={schedule.startDate}
+              max={schedule.endDate}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="add-sess-start">Start Time</Label>
+              <Input
+                id="add-sess-start"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                placeholder="5:00 PM"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-sess-end">End Time</Label>
+              <Input
+                id="add-sess-end"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                placeholder="8:00 PM"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="add-sess-location">Location</Label>
+            <Input
+              id="add-sess-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Field House"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="add-sess-staff">Staff Needed</Label>
+            <Input
+              id="add-sess-staff"
+              type="number"
+              min={1}
+              value={requiredStaff}
+              onChange={(e) => setRequiredStaff(parseInt(e.target.value) || 1)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleAdd}>Add Session</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ConflictResolutionDialog({
+  conflicts,
+  open,
+  onOpenChange,
+}: {
+  conflicts: AutoAssignConflict[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            {conflicts.length} Session{conflicts.length !== 1 ? "s" : ""} Need Attention
+          </DialogTitle>
+          <DialogDescription>
+            The following sessions could not be fully staffed by auto-assign.
+            Review each conflict and resolve manually.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="overflow-y-auto space-y-3 pr-1">
+          {conflicts.map((c) => {
+            const d = new Date(c.date + "T12:00:00");
+            const dateLabel = d.toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            });
+            return (
+              <div
+                key={c.sessionId}
+                className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">
+                    {dateLabel} &middot; {c.startTime} &ndash; {c.endTime}
+                  </div>
+                  <Badge variant="destructive" className="text-xs">
+                    {c.unfilledCount} unfilled
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{c.location}</span>
+                  {c.classType && <span>&middot; {c.classType}</span>}
+                  <span>&middot; {c.assignedCount}/{c.requiredStaff} staffed</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-green-700">{c.availableCount} available</span>
+                  {c.maybeCount > 0 && (
+                    <span className="text-yellow-700">{c.maybeCount} maybe</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {c.reason}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)}>
+            Got it
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
   const {
     autoAssignAll,
-    initializeSlotsForSession,
     getSlotsForSession,
+    initializeSlotsForSession,
     sessionSlots,
   } = useScheduling();
+
+  const [conflicts, setConflicts] = useState<AutoAssignConflict[]>([]);
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
 
   const sessions = useMemo(
     () =>
@@ -177,11 +467,18 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     [schedule.sessions]
   );
 
+  const initializedRef = useRef(new Set<string>());
+
   useEffect(() => {
     for (const session of sessions) {
-      initializeSlotsForSession(session.id, session.requiredStaff);
+      if (initializedRef.current.has(session.id)) continue;
+      const slots = getSlotsForSession(session.id);
+      if (slots.length === 0 && session.requiredStaff > 0) {
+        initializedRef.current.add(session.id);
+        initializeSlotsForSession(session.id, session.requiredStaff);
+      }
     }
-  }, [sessions, initializeSlotsForSession]);
+  }, [sessions, getSlotsForSession, initializeSlotsForSession]);
 
   const slotsBySession = useMemo(() => {
     const map = new Map<string, SessionSlot[]>();
@@ -225,16 +522,34 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     return map;
   }, [sessions]);
 
-  function handleAutoAssign() {
-    const { assigned, empty } = autoAssignAll(schedule.id);
-    if (assigned > 0 && empty === 0) {
-      toast.success(`Auto-assigned ${assigned} staff. All slots filled!`);
-    } else if (assigned > 0) {
-      toast.success(
-        `Auto-assigned ${assigned} staff. ${empty} slot${empty > 1 ? "s" : ""} still empty.`
-      );
-    } else {
-      toast.info("No additional staff could be auto-assigned.");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const SCROLL_AMOUNT = 450;
+
+  const scrollLeft = useCallback(() => {
+    scrollRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: "smooth" });
+  }, []);
+
+  const scrollRight = useCallback(() => {
+    scrollRef.current?.scrollBy({ left: SCROLL_AMOUNT, behavior: "smooth" });
+  }, []);
+
+  async function handleAutoAssign() {
+    try {
+      const result = await autoAssignAll(schedule.id);
+      if (result.assigned > 0 && result.empty === 0) {
+        toast.success(`Auto-assigned ${result.assigned} staff. All slots filled!`);
+      } else if (result.assigned > 0 && result.conflicts.length > 0) {
+        toast.success(`Auto-assigned ${result.assigned} staff.`);
+        setConflicts(result.conflicts);
+        setConflictDialogOpen(true);
+      } else if (result.conflicts.length > 0) {
+        setConflicts(result.conflicts);
+        setConflictDialogOpen(true);
+      } else {
+        toast.info("No additional staff could be auto-assigned.");
+      }
+    } catch {
+      toast.error("Auto-assign failed.");
     }
   }
 
@@ -242,13 +557,26 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-semibold">Staff Assignments</h2>
-        <Button size="sm" onClick={handleAutoAssign}>
-          <Sparkles className="h-4 w-4 mr-1" />
-          Auto Assign
-        </Button>
+        <div className="flex items-center gap-2">
+          {dates.length >= 10 && (
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={scrollLeft}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={scrollRight}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+          <AddSessionDialog schedule={schedule} />
+          <Button size="sm" onClick={handleAutoAssign}>
+            <Sparkles className="h-4 w-4 mr-1" />
+            Auto Assign
+          </Button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div ref={scrollRef} className="overflow-x-auto rounded-lg border">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b bg-muted/50">
@@ -373,6 +701,12 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           </tbody>
         </table>
       </div>
+
+      <ConflictResolutionDialog
+        conflicts={conflicts}
+        open={conflictDialogOpen}
+        onOpenChange={setConflictDialogOpen}
+      />
     </div>
   );
 }

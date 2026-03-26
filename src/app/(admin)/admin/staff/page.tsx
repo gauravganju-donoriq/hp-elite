@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, KeyRound } from "lucide-react";
 import type { StaffRole } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -53,12 +53,16 @@ const ROLE_VARIANTS: Record<StaffRole, "default" | "secondary" | "outline" | "de
 };
 
 export default function StaffManagementPage() {
-  const { staff, addStaff, updateStaff, removeStaff } = useScheduling();
+  const { staff, updateStaff, removeStaff, refreshAll } = useScheduling();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<StaffRole>("assistant-coach");
+  const [yearsExperience, setYearsExperience] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   const sortedStaff = [...staff].sort(
     (a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
@@ -68,7 +72,10 @@ export default function StaffManagementPage() {
     setEditId(null);
     setFirstName("");
     setLastName("");
+    setEmail("");
+    setPassword("");
     setRole("assistant-coach");
+    setYearsExperience(0);
     setDialogOpen(true);
   }
 
@@ -78,30 +85,66 @@ export default function StaffManagementPage() {
     setEditId(id);
     setFirstName(member.firstName);
     setLastName(member.lastName);
+    setEmail("");
+    setPassword("");
     setRole(member.role);
+    setYearsExperience(member.yearsExperience ?? 0);
     setDialogOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!firstName.trim() || !lastName.trim()) {
       toast.error("First and last name are required.");
       return;
     }
 
-    if (editId) {
-      updateStaff(editId, { firstName: firstName.trim(), lastName: lastName.trim(), role });
-      toast.success("Staff member updated.");
-    } else {
-      addStaff({
-        id: `s-${Date.now()}`,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        role,
-      });
-      toast.success("Staff member added.");
-    }
+    setSaving(true);
 
-    setDialogOpen(false);
+    try {
+      if (editId) {
+        updateStaff(editId, {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          role,
+          yearsExperience,
+        });
+        toast.success("Staff member updated.");
+      } else {
+        if (!email.trim() || !password.trim()) {
+          toast.error("Email and password are required for new staff.");
+          setSaving(false);
+          return;
+        }
+
+        const res = await fetch("/api/admin/create-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password: password.trim(),
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            name: `${firstName.trim()} ${lastName.trim()}`,
+            staffRole: role,
+            yearsExperience,
+          }),
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || "Failed to create user");
+        }
+
+        await refreshAll();
+        toast.success("Staff member created with login account.");
+      }
+
+      setDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save staff member.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleRemove(id: string) {
@@ -160,30 +203,67 @@ export default function StaffManagementPage() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v) => setRole(v as StaffRole)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+              {!editId && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="staff@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Password</Label>
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Set a password"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select
+                    value={role}
+                    onValueChange={(v) => setRole(v as StaffRole)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Years of Experience</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={yearsExperience}
+                    onChange={(e) => setYearsExperience(parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                  />
+                </div>
               </div>
+
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave}>
-                  {editId ? "Save Changes" : "Add"}
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving..." : editId ? "Save Changes" : "Create Staff"}
                 </Button>
               </div>
             </div>
@@ -224,6 +304,8 @@ export default function StaffManagementPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Experience</TableHead>
+                <TableHead>Account</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -237,6 +319,21 @@ export default function StaffManagementPage() {
                     <Badge variant={ROLE_VARIANTS[member.role]}>
                       {ROLE_LABELS[member.role]}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm">
+                      {member.yearsExperience ?? 0} yr{(member.yearsExperience ?? 0) !== 1 ? "s" : ""}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {member.userId ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <KeyRound className="h-3 w-3" />
+                        Linked
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No account</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

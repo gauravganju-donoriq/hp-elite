@@ -1,10 +1,14 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useScheduling } from "@/lib/context";
+import type { Schedule } from "@/lib/types";
 import { SessionSlotsPanel } from "@/components/session-slots-panel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -12,10 +16,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
   MapPin,
+  Pencil,
   Trash2,
   Users,
   CheckCircle2,
@@ -31,6 +45,102 @@ function formatDate(dateStr: string) {
   });
 }
 
+function EditScheduleDialog({ schedule }: { schedule: Schedule }) {
+  const { updateSchedule } = useScheduling();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(schedule.name);
+  const [description, setDescription] = useState(schedule.description ?? "");
+  const [startDate, setStartDate] = useState(schedule.startDate);
+  const [endDate, setEndDate] = useState(schedule.endDate);
+
+  function handleOpen(isOpen: boolean) {
+    setOpen(isOpen);
+    if (isOpen) {
+      setName(schedule.name);
+      setDescription(schedule.description ?? "");
+      setStartDate(schedule.startDate);
+      setEndDate(schedule.endDate);
+    }
+  }
+
+  function handleSave() {
+    if (!name.trim()) {
+      toast.error("Name is required.");
+      return;
+    }
+    updateSchedule(schedule.id, {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      startDate,
+      endDate,
+    });
+    toast.success("Schedule updated.");
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Pencil className="h-4 w-4 mr-1" />
+          Edit
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Schedule</DialogTitle>
+          <DialogDescription>Update the schedule details.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">Name *</Label>
+            <Input
+              id="edit-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-desc">Description</Label>
+            <Textarea
+              id="edit-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-start">Start Date</Label>
+              <Input
+                id="edit-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-end">End Date</Label>
+              <Input
+                id="edit-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ScheduleDetailPage({
   params,
 }: {
@@ -38,7 +148,15 @@ export default function ScheduleDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { schedules, availability, deleteSchedule, sessionSlots } = useScheduling();
+  const { schedules, availability, deleteSchedule, updateSchedule, sessionSlots, loading } = useScheduling();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   const schedule = schedules.find((s) => s.id === id);
   if (!schedule) {
@@ -103,10 +221,13 @@ export default function ScheduleDetailPage({
             </span>
           </div>
         </div>
-        <Button variant="destructive" size="sm" onClick={handleDelete}>
-          <Trash2 className="h-4 w-4 mr-1" />
-          Delete Schedule
-        </Button>
+        <div className="flex items-center gap-2">
+          <EditScheduleDialog schedule={schedule} />
+          <Button variant="destructive" size="sm" onClick={handleDelete}>
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete Schedule
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

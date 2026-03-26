@@ -120,20 +120,28 @@ function monthLabel(dateStr: string) {
 
 export default function AvailabilityPage() {
   const router = useRouter();
-  const { identity } = useStaffIdentity();
-  const { staff, schedules, availability, setAvailability } = useScheduling();
+  const { identity, loading: identityLoading } = useStaffIdentity();
+  const { staff, schedules, availability, setAvailability, loading: dataLoading } = useScheduling();
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [openPopover, setOpenPopover] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!identity) router.replace("/");
-  }, [identity, router]);
+    if (!identityLoading && !identity) router.replace("/login");
+  }, [identity, identityLoading, router]);
 
   useEffect(() => {
     if (schedules.length > 0 && !selectedSchedule) {
       setSelectedSchedule(schedules[0].id);
     }
   }, [schedules, selectedSchedule]);
+
+  if (identityLoading || dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   if (!identity) return null;
 

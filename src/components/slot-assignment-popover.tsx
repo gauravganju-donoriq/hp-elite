@@ -49,18 +49,23 @@ const ROLE_PRIORITY: Record<StaffRole, number> = {
   intern: 3,
 };
 
-const AVAILABILITY_PRIORITY: Record<string, number> = {
-  available: 0,
-  maybe: 1,
-  pending: 2,
-  unavailable: 3,
-};
-
 interface SlotAssignmentPopoverProps {
   slot: SessionSlot;
   session: Session;
   allSlots: SessionSlot[];
   children: React.ReactNode;
+}
+
+function sortByExperience(
+  a: { member: { yearsExperience: number; role: StaffRole; id: string } },
+  b: { member: { yearsExperience: number; role: StaffRole; id: string } },
+  assignmentCounts: Map<string, number>
+) {
+  const expDiff = (b.member.yearsExperience ?? 0) - (a.member.yearsExperience ?? 0);
+  if (expDiff !== 0) return expDiff;
+  const roleDiff = ROLE_PRIORITY[a.member.role] - ROLE_PRIORITY[b.member.role];
+  if (roleDiff !== 0) return roleDiff;
+  return (assignmentCounts.get(a.member.id) || 0) - (assignmentCounts.get(b.member.id) || 0);
 }
 
 export function SlotAssignmentPopover({
@@ -94,7 +99,7 @@ export function SlotAssignmentPopover({
     }
   }
 
-  const recommendedStaff = staff
+  const eligibleStaff = staff
     .filter((m) => !alreadyAssignedInSession.has(m.id))
     .map((member) => {
       const avail = availability.find(
@@ -103,19 +108,15 @@ export function SlotAssignmentPopover({
       const status = avail?.status || "pending";
       return { member, status };
     })
-    .sort((a, b) => {
-      const availDiff =
-        (AVAILABILITY_PRIORITY[a.status] ?? 99) -
-        (AVAILABILITY_PRIORITY[b.status] ?? 99);
-      if (availDiff !== 0) return availDiff;
-      const roleDiff =
-        ROLE_PRIORITY[a.member.role] - ROLE_PRIORITY[b.member.role];
-      if (roleDiff !== 0) return roleDiff;
-      return (
-        (assignmentCounts.get(a.member.id) || 0) -
-        (assignmentCounts.get(b.member.id) || 0)
-      );
-    });
+    .filter(({ status }) => status === "available" || status === "maybe");
+
+  const availableStaff = eligibleStaff
+    .filter(({ status }) => status === "available")
+    .sort((a, b) => sortByExperience(a, b, assignmentCounts));
+
+  const maybeStaff = eligibleStaff
+    .filter(({ status }) => status === "maybe")
+    .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
   function handleAssign(staffId: string) {
     assignStaffToSlot(slot.id, staffId);
@@ -130,14 +131,61 @@ export function SlotAssignmentPopover({
   const STATUS_BADGE: Record<string, string> = {
     available: "bg-green-100 text-green-800",
     maybe: "bg-yellow-100 text-yellow-800",
-    unavailable: "bg-red-100 text-red-800",
-    pending: "bg-gray-100 text-gray-500",
   };
+
+  function renderStaffRow({ member, status }: { member: typeof staff[number]; status: string }) {
+    const isAssigned = slot.assignedStaffId === member.id;
+    const count = assignmentCounts.get(member.id) || 0;
+    return (
+      <button
+        key={member.id}
+        onClick={() => handleAssign(member.id)}
+        className={cn(
+          "w-full flex items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+          isAssigned && "bg-accent"
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {isAssigned ? (
+            <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
+          ) : (
+            <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          )}
+          <span className="truncate">
+            {member.firstName} {member.lastName}
+          </span>
+          <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+            {ROLE_LABELS[member.role]}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          <span className="text-[10px] text-muted-foreground">
+            {member.yearsExperience ?? 0}yr
+          </span>
+          <span
+            className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded",
+              STATUS_BADGE[status] ?? "bg-gray-100 text-gray-500"
+            )}
+          >
+            {status === "available" ? "Yes" : "Maybe"}
+          </span>
+          {count > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              ({count})
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  }
+
+  const hasNone = availableStaff.length === 0 && maybeStaff.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="start">
+      <PopoverContent className="w-72 p-0" align="start">
         <div className="space-y-0">
           <div className="p-3 pb-2 border-b flex items-center justify-between">
             <p className="text-sm font-medium">Assign Staff</p>
@@ -153,55 +201,32 @@ export function SlotAssignmentPopover({
             )}
           </div>
           <div className="max-h-64 overflow-y-auto">
-            {recommendedStaff.map(({ member, status }) => {
-              const isAssigned = slot.assignedStaffId === member.id;
-              const count = assignmentCounts.get(member.id) || 0;
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => handleAssign(member.id)}
-                  className={cn(
-                    "w-full flex items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                    isAssigned && "bg-accent"
-                  )}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {isAssigned ? (
-                      <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                    ) : (
-                      <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="truncate">
-                      {member.firstName} {member.lastName}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-                      {ROLE_LABELS[member.role]}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                    <span
-                      className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded",
-                        STATUS_BADGE[status]
-                      )}
-                    >
-                      {status === "available"
-                        ? "Yes"
-                        : status === "maybe"
-                          ? "Maybe"
-                          : status === "unavailable"
-                            ? "No"
-                            : "--"}
-                    </span>
-                    {count > 0 && (
-                      <span className="text-[10px] text-muted-foreground">
-                        ({count})
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+            {hasNone && (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                No eligible staff for this session. Only staff who marked
+                themselves available or maybe are shown.
+              </div>
+            )}
+            {availableStaff.length > 0 && (
+              <>
+                <div className="px-3 pt-2 pb-1">
+                  <span className="text-[10px] font-medium text-green-700 uppercase tracking-wider">
+                    Available
+                  </span>
+                </div>
+                {availableStaff.map(renderStaffRow)}
+              </>
+            )}
+            {maybeStaff.length > 0 && (
+              <>
+                <div className="px-3 pt-2 pb-1 border-t">
+                  <span className="text-[10px] font-medium text-yellow-700 uppercase tracking-wider">
+                    Maybe
+                  </span>
+                </div>
+                {maybeStaff.map(renderStaffRow)}
+              </>
+            )}
           </div>
         </div>
       </PopoverContent>

@@ -14,16 +14,17 @@ import type {
   Session,
   Availability,
   AvailabilityStatus,
-  StaffRole,
   SessionSlot,
+  AutoAssignResult,
 } from "./types";
-import { initialStaff, initialSchedules, initialAvailability } from "./data";
 
 interface SchedulingContextType {
   staff: Staff[];
   schedules: Schedule[];
   availability: Availability[];
   sessionSlots: SessionSlot[];
+  loading: boolean;
+  refreshAll: () => Promise<void>;
 
   addStaff: (s: Staff) => void;
   updateStaff: (id: string, updates: Partial<Staff>) => void;
@@ -54,86 +55,119 @@ interface SchedulingContextType {
   assignStaffToSlot: (slotId: string, staffId: string) => void;
   unassignSlot: (slotId: string) => void;
   getSlotsForSession: (sessionId: string) => SessionSlot[];
-  autoAssignAll: (scheduleId: string) => { assigned: number; empty: number };
+  autoAssignAll: (scheduleId: string) => Promise<AutoAssignResult>;
 }
-
-const STORAGE_KEY = "hp-elite-scheduling";
 
 const SchedulingContext = createContext<SchedulingContextType | null>(null);
 
-interface StoredData {
-  staff: Staff[];
-  schedules: Schedule[];
-  availability: Availability[];
-  sessionSlots?: SessionSlot[];
-}
-
-function loadFromStorage(): StoredData | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `API error: ${res.status}`);
   }
-  return null;
-}
-
-function saveToStorage(data: StoredData) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // ignore
-  }
+  return res.json();
 }
 
 export function SchedulingProvider({ children }: { children: ReactNode }) {
-  const [staff, setStaff] = useState<Staff[]>(initialStaff);
-  const [schedules, setSchedules] = useState<Schedule[]>(initialSchedules);
-  const [availability, setAvailability] = useState<Availability[]>(initialAvailability);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [availability, setAvailability] = useState<Availability[]>([]);
   const [sessionSlots, setSessionSlots] = useState<SessionSlot[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const stored = loadFromStorage();
-    if (stored) {
-      setStaff(stored.staff);
-      setSchedules(stored.schedules);
-      setAvailability(stored.availability);
-      if (stored.sessionSlots) setSessionSlots(stored.sessionSlots);
+  const refreshAll = useCallback(async () => {
+    try {
+      const [staffData, schedData, availData, slotsData] = await Promise.all([
+        apiFetch<Staff[]>("/api/staff"),
+        apiFetch<Schedule[]>("/api/schedules"),
+        apiFetch<Availability[]>("/api/availability"),
+        apiFetch<SessionSlot[]>("/api/slots"),
+      ]);
+      setStaff(staffData);
+      setSchedules(schedData);
+      setAvailability(availData);
+      setSessionSlots(slotsData);
+    } catch {
+      // If API fails (e.g. not authenticated), leave empty arrays
+    } finally {
+      setLoading(false);
     }
-    setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (loaded) {
-      saveToStorage({ staff, schedules, availability, sessionSlots });
-    }
-  }, [staff, schedules, availability, sessionSlots, loaded]);
+    refreshAll();
+  }, [refreshAll]);
+
+  // --------------- Staff ---------------
 
   const addStaff = useCallback((s: Staff) => {
     setStaff((prev) => [...prev, s]);
+    apiFetch("/api/staff", {
+      method: "POST",
+      body: JSON.stringify(s),
+    }).catch(() => {
+      setStaff((prev) => prev.filter((x) => x.id !== s.id));
+    });
   }, []);
 
-  const updateStaff = useCallback((id: string, updates: Partial<Staff>) => {
+  const updateStaffFn = useCallback((id: string, updates: Partial<Staff>) => {
     setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    apiFetch(`/api/staff/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    }).catch(() => {});
   }, []);
 
   const removeStaff = useCallback((id: string) => {
     setStaff((prev) => prev.filter((s) => s.id !== id));
     setAvailability((prev) => prev.filter((a) => a.staffId !== id));
+    apiFetch(`/api/staff/${id}`, { method: "DELETE" }).catch(() => {});
   }, []);
+
+  // --------------- Schedules ---------------
 
   const addSchedule = useCallback((s: Schedule) => {
+    const sessions = s.sessions;
+    const scheduleOnly = { ...s, sessions: [] };
     setSchedules((prev) => [...prev, s]);
+
+    (async () => {
+      await apiFetch("/api/schedules", {
+        method: "POST",
+        body: JSON.stringify({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          startDate: s.startDate,
+          endDate: s.endDate,
+        }),
+      });
+      if (sessions.length > 0) {
+        await apiFetch(`/api/schedules/${s.id}/sessions`, {
+          method: "POST",
+          body: JSON.stringify({ sessions }),
+        });
+      }
+    })().catch(() => {
+      setSchedules((prev) => prev.filter((x) => x.id !== scheduleOnly.id));
+    });
   }, []);
 
-  const updateSchedule = useCallback((id: string, updates: Partial<Schedule>) => {
+  const updateScheduleFn = useCallback((id: string, updates: Partial<Schedule>) => {
     setSchedules((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
     );
+    apiFetch(`/api/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    }).catch(() => {});
   }, []);
 
-  const deleteSchedule = useCallback((id: string) => {
+  const deleteScheduleFn = useCallback((id: string) => {
     setSchedules((prev) => {
       const schedule = prev.find((s) => s.id === id);
       if (schedule) {
@@ -142,7 +176,10 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
       }
       return prev.filter((s) => s.id !== id);
     });
+    apiFetch(`/api/schedules/${id}`, { method: "DELETE" }).catch(() => {});
   }, []);
+
+  // --------------- Sessions ---------------
 
   const addSession = useCallback((scheduleId: string, session: Session) => {
     setSchedules((prev) =>
@@ -151,6 +188,10 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         return { ...s, sessions: [...s.sessions, session] };
       })
     );
+    apiFetch(`/api/schedules/${scheduleId}/sessions`, {
+      method: "POST",
+      body: JSON.stringify({ sessions: [session] }),
+    }).catch(() => {});
   }, []);
 
   const addSessions = useCallback((scheduleId: string, sessions: Session[]) => {
@@ -160,9 +201,13 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         return { ...s, sessions: [...s.sessions, ...sessions] };
       })
     );
+    apiFetch(`/api/schedules/${scheduleId}/sessions`, {
+      method: "POST",
+      body: JSON.stringify({ sessions }),
+    }).catch(() => {});
   }, []);
 
-  const updateSession = useCallback(
+  const updateSessionFn = useCallback(
     (scheduleId: string, sessionId: string, updates: Partial<Session>) => {
       setSchedules((prev) =>
         prev.map((s) => {
@@ -175,6 +220,10 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
           };
         })
       );
+      apiFetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      }).catch(() => {});
     },
     []
   );
@@ -187,7 +236,10 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
       })
     );
     setAvailability((prev) => prev.filter((a) => a.sessionId !== sessionId));
+    apiFetch(`/api/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
   }, []);
+
+  // --------------- Availability ---------------
 
   const setAvailabilityFn = useCallback(
     (
@@ -198,18 +250,12 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
       customEndTime?: string,
       notes?: string
     ) => {
+      const entry: Availability = { staffId, sessionId, status, customStartTime, customEndTime, notes };
+
       setAvailability((prev) => {
         const idx = prev.findIndex(
           (a) => a.staffId === staffId && a.sessionId === sessionId
         );
-        const entry: Availability = {
-          staffId,
-          sessionId,
-          status,
-          customStartTime,
-          customEndTime,
-          notes,
-        };
         if (idx >= 0) {
           const next = [...prev];
           next[idx] = entry;
@@ -217,14 +263,22 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         }
         return [...prev, entry];
       });
+
+      apiFetch("/api/availability", {
+        method: "POST",
+        body: JSON.stringify(entry),
+      }).catch(() => {});
     },
     []
   );
 
-  const removeAvailability = useCallback((staffId: string, sessionId: string) => {
+  const removeAvailabilityFn = useCallback((staffId: string, sessionId: string) => {
     setAvailability((prev) =>
       prev.filter((a) => !(a.staffId === staffId && a.sessionId === sessionId))
     );
+    apiFetch(`/api/availability?staffId=${staffId}&sessionId=${sessionId}`, {
+      method: "DELETE",
+    }).catch(() => {});
   }, []);
 
   const getAvailability = useCallback(
@@ -245,6 +299,8 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     },
     [availability]
   );
+
+  // --------------- Session Slots ---------------
 
   const initializeSlotsForSession = useCallback(
     (sessionId: string, count: number) => {
@@ -271,6 +327,11 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         const kept = forSession.slice(0, count);
         return [...others, ...kept];
       });
+
+      apiFetch(`/api/sessions/${sessionId}/slots`, {
+        method: "POST",
+        body: JSON.stringify({ count }),
+      }).catch(() => {});
     },
     []
   );
@@ -279,6 +340,11 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     setSessionSlots((prev) =>
       prev.map((s) => (s.id === slotId ? { ...s, assignedStaffId: staffId } : s))
     );
+    const sessionId = slotId.split("-").slice(1, -1).join("-");
+    apiFetch(`/api/sessions/${sessionId}/slots`, {
+      method: "PATCH",
+      body: JSON.stringify({ slotId, staffId }),
+    }).catch(() => {});
   }, []);
 
   const unassignSlot = useCallback((slotId: string) => {
@@ -287,6 +353,11 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         s.id === slotId ? { ...s, assignedStaffId: undefined } : s
       )
     );
+    const sessionId = slotId.split("-").slice(1, -1).join("-");
+    apiFetch(`/api/sessions/${sessionId}/slots`, {
+      method: "PATCH",
+      body: JSON.stringify({ slotId, action: "unassign" }),
+    }).catch(() => {});
   }, []);
 
   const getSlotsForSession = useCallback(
@@ -298,97 +369,17 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     [sessionSlots]
   );
 
-  const ROLE_PRIORITY: Record<StaffRole, number> = {
-    "head-coach": 0,
-    "assistant-coach": 1,
-    volunteer: 2,
-    intern: 3,
-  };
-
   const autoAssignAll = useCallback(
-    (scheduleId: string) => {
-      const schedule = schedules.find((s) => s.id === scheduleId);
-      if (!schedule) return { assigned: 0, empty: 0 };
-
-      const assignmentCounts = new Map<string, number>();
-      for (const slot of sessionSlots) {
-        if (slot.assignedStaffId) {
-          assignmentCounts.set(
-            slot.assignedStaffId,
-            (assignmentCounts.get(slot.assignedStaffId) || 0) + 1
-          );
-        }
-      }
-
-      let totalAssigned = 0;
-      let totalEmpty = 0;
-
-      setSessionSlots((prev) => {
-        const next = [...prev];
-
-        for (const session of schedule.sessions) {
-          const sessionSlotIdxs: number[] = [];
-          for (let i = 0; i < next.length; i++) {
-            if (next[i].sessionId === session.id) sessionSlotIdxs.push(i);
-          }
-
-          if (sessionSlotIdxs.length < session.requiredStaff) {
-            for (let i = sessionSlotIdxs.length; i < session.requiredStaff; i++) {
-              const newSlot: SessionSlot = {
-                id: `slot-${session.id}-${i}`,
-                sessionId: session.id,
-                slotIndex: i,
-              };
-              next.push(newSlot);
-              sessionSlotIdxs.push(next.length - 1);
-            }
-          }
-
-          const alreadyAssigned = new Set<string>();
-          for (const idx of sessionSlotIdxs) {
-            if (next[idx].assignedStaffId) alreadyAssigned.add(next[idx].assignedStaffId!);
-          }
-
-          const availableStaff = staff
-            .filter((member) => {
-              if (alreadyAssigned.has(member.id)) return false;
-              const avail = availability.find(
-                (a) => a.staffId === member.id && a.sessionId === session.id
-              );
-              return avail?.status === "available";
-            })
-            .sort((a, b) => {
-              const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
-              if (roleDiff !== 0) return roleDiff;
-              return (assignmentCounts.get(a.id) || 0) - (assignmentCounts.get(b.id) || 0);
-            });
-
-          let staffIdx = 0;
-          for (const slotIdx of sessionSlotIdxs) {
-            if (next[slotIdx].assignedStaffId) continue;
-            if (staffIdx < availableStaff.length) {
-              next[slotIdx] = {
-                ...next[slotIdx],
-                assignedStaffId: availableStaff[staffIdx].id,
-              };
-              assignmentCounts.set(
-                availableStaff[staffIdx].id,
-                (assignmentCounts.get(availableStaff[staffIdx].id) || 0) + 1
-              );
-              totalAssigned++;
-              staffIdx++;
-            } else {
-              totalEmpty++;
-            }
-          }
-        }
-
-        return next;
-      });
-
-      return { assigned: totalAssigned, empty: totalEmpty };
+    async (scheduleId: string): Promise<AutoAssignResult> => {
+      const result = await apiFetch<AutoAssignResult>(
+        `/api/schedules/${scheduleId}/auto-assign`,
+        { method: "POST" }
+      );
+      const slotsData = await apiFetch<SessionSlot[]>("/api/slots");
+      setSessionSlots(slotsData);
+      return result;
     },
-    [schedules, staff, availability, sessionSlots]
+    []
   );
 
   return (
@@ -398,18 +389,20 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         schedules,
         availability,
         sessionSlots,
+        loading,
+        refreshAll,
         addStaff,
-        updateStaff,
+        updateStaff: updateStaffFn,
         removeStaff,
         addSchedule,
-        updateSchedule,
-        deleteSchedule,
+        updateSchedule: updateScheduleFn,
+        deleteSchedule: deleteScheduleFn,
         addSession,
         addSessions,
-        updateSession,
+        updateSession: updateSessionFn,
         removeSession,
         setAvailability: setAvailabilityFn,
-        removeAvailability,
+        removeAvailability: removeAvailabilityFn,
         getAvailability,
         getSessionStaffCount,
         initializeSlotsForSession,

@@ -2,9 +2,11 @@ export type StaffRole = "head-coach" | "assistant-coach" | "volunteer" | "intern
 
 export interface Staff {
   id: string;
+  userId?: string;
   firstName: string;
   lastName: string;
   role: StaffRole;
+  yearsExperience: number;
 }
 
 export type AvailabilityStatus = "available" | "unavailable" | "maybe" | "pending";
@@ -62,4 +64,25 @@ export interface SessionSlot {
   sessionId: string;
   slotIndex: number;
   assignedStaffId?: string;
+}
+
+export interface AutoAssignConflict {
+  sessionId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  classType?: string;
+  requiredStaff: number;
+  assignedCount: number;
+  unfilledCount: number;
+  availableCount: number;
+  maybeCount: number;
+  reason: string;
+}
+
+export interface AutoAssignResult {
+  assigned: number;
+  empty: number;
+  conflicts: AutoAssignConflict[];
 }

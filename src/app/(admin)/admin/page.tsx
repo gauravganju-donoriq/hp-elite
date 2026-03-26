@@ -7,7 +7,15 @@ import { ScheduleCard } from "@/components/schedule-card";
 import { useScheduling } from "@/lib/context";
 
 export default function AdminDashboardPage() {
-  const { schedules } = useScheduling();
+  const { schedules, loading } = useScheduling();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -6,7 +6,7 @@ function makeStaff(
   lastName: string,
   role: Staff["role"] = "assistant-coach"
 ): Staff {
-  return { id, firstName, lastName, role };
+  return { id, firstName, lastName, role, yearsExperience: 0 };
 }
 
 export const initialStaff: Staff[] = [

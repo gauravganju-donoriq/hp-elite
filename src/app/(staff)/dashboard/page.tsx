@@ -1,9 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useStaffIdentity } from "@/lib/staff-context";
 import { useScheduling } from "@/lib/context";
-import { useEffect } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -16,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   CalendarCheck,
-  CalendarDays,
   CheckCircle2,
   Clock,
   MapPin,
@@ -40,20 +37,26 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function StaffDashboardPage() {
-  const router = useRouter();
-  const { identity } = useStaffIdentity();
-  const { staff, schedules, availability } = useScheduling();
+  const { identity, userName, loading: identityLoading } = useStaffIdentity();
+  const { staff, schedules, availability, loading: dataLoading } = useScheduling();
 
-  useEffect(() => {
-    if (!identity) router.replace("/");
-  }, [identity, router]);
+  if (identityLoading || dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
-  if (!identity) return null;
+  const currentStaff = identity
+    ? staff.find((s) => s.id === identity.staffId)
+    : null;
 
-  const currentStaff = staff.find((s) => s.id === identity.staffId);
-  if (!currentStaff) return null;
+  const displayName = currentStaff?.firstName || userName || "there";
 
-  const myAvailability = availability.filter((a) => a.staffId === identity.staffId);
+  const myAvailability = identity
+    ? availability.filter((a) => a.staffId === identity.staffId)
+    : [];
   const myAvailMap = new Map(myAvailability.map((a) => [a.sessionId, a]));
 
   const allSessions = schedules.flatMap((s) => s.sessions);
@@ -72,7 +75,7 @@ export default function StaffDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Welcome, {currentStaff.firstName}
+          Welcome, {displayName}
         </h1>
         <p className="text-muted-foreground">
           Here&apos;s your scheduling overview.
@@ -127,7 +130,7 @@ export default function StaffDashboardPage() {
         </Card>
       </div>
 
-      {pendingCount > 0 && (
+      {identity && pendingCount > 0 && (
         <Card className="border-yellow-200 bg-yellow-50/50">
           <CardContent className="flex items-center justify-between py-4">
             <div className="flex items-center gap-3">
