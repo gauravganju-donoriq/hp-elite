@@ -3,7 +3,7 @@ import { getSessionCookie } from "better-auth/cookies";
 
 const STAFF_ROUTES = ["/dashboard", "/availability"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
   const { pathname } = request.nextUrl;
 
