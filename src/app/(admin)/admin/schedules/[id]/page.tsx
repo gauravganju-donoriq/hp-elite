@@ -234,18 +234,19 @@ export default function ScheduleDetailPage({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sessions
+              Total Sessions
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalSessions}</div>
+            <p className="text-xs text-muted-foreground mt-1">Training sessions in this schedule</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              Assigned
+              Slots Filled
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -255,24 +256,26 @@ export default function ScheduleDetailPage({
                 /{totalRequired}
               </span>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Staff assigned out of total slots needed</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <Users className="h-3.5 w-3.5 text-blue-600" />
-              Available
+              Availability Responses
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{totalAvailable}</div>
+            <p className="text-xs text-muted-foreground mt-1">Staff who confirmed available across sessions</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
-              Needs Staff
+              Understaffed Sessions
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -282,6 +285,7 @@ export default function ScheduleDetailPage({
                 /{totalSessions}
               </span>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Sessions that still need more staff assigned</p>
           </CardContent>
         </Card>
       </div>

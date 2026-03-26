@@ -123,7 +123,7 @@ function SessionConfigPopover({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
+      <PopoverContent className="w-80 p-0 max-h-[80vh] overflow-y-auto" align="start" side="bottom" collisionPadding={16} avoidCollisions>
         <div className="p-3 space-y-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">

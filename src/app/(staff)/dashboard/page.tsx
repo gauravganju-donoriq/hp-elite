@@ -19,6 +19,9 @@ import {
   MapPin,
   XCircle,
   HelpCircle,
+  MessageSquare,
+  AlertCircle,
+  LayoutGrid,
 } from "lucide-react";
 
 function formatDate(dateStr: string) {
@@ -72,93 +75,101 @@ export default function StaffDashboardPage() {
   const pendingCount = totalSessions - respondedCount;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
           Welcome, {displayName}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Here&apos;s your scheduling overview.
         </p>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:gap-4 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              My Confirmed
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+              Confirmed Available
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{confirmedCount}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">{confirmedCount}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Sessions you marked as available</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
               Responded
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold">
               {respondedCount}
-              <span className="text-sm font-normal text-muted-foreground">
+              <span className="text-xs sm:text-sm font-normal text-muted-foreground">
                 /{totalSessions}
               </span>
             </div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Sessions you&apos;ve submitted a response for</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pending
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5 text-yellow-600" />
+              Awaiting Response
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600">{pendingCount}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Sessions that still need your availability</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Schedules
+          <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <LayoutGrid className="h-3.5 w-3.5 text-primary" />
+              Active Schedules
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{schedules.length}</div>
+          <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+            <div className="text-xl sm:text-2xl font-bold">{schedules.length}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Schedules you&apos;re part of</p>
           </CardContent>
         </Card>
       </div>
 
       {identity && pendingCount > 0 && (
         <Card className="border-yellow-200 bg-yellow-50/50">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <CalendarCheck className="h-5 w-5 text-yellow-600" />
+          <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-3 sm:py-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <CalendarCheck className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5 sm:mt-0" />
               <div>
-                <p className="font-medium">
-                  You have {pendingCount} sessions without a response.
+                <p className="text-sm font-medium">
+                  {pendingCount} session{pendingCount !== 1 ? "s" : ""} need your response.
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Submit your availability so the team can plan ahead.
                 </p>
               </div>
             </div>
-            <Link href="/availability">
-              <Button size="sm">Update Availability</Button>
+            <Link href="/availability" className="w-full sm:w-auto">
+              <Button size="sm" className="w-full sm:w-auto">Update Availability</Button>
             </Link>
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Upcoming Sessions</CardTitle>
-          <CardDescription>
-            Your next {upcomingSessions.length} sessions and your availability status.
+        <CardHeader className="px-4 sm:px-6">
+          <CardTitle className="text-base sm:text-lg">Upcoming Sessions</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Your next sessions and availability status.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6">
           {upcomingSessions.length === 0 ? (
             <p className="text-sm text-muted-foreground">No upcoming sessions.</p>
           ) : (
@@ -168,35 +179,35 @@ export default function StaffDashboardPage() {
                 return (
                   <div
                     key={session.id}
-                    className="flex items-center justify-between rounded-lg border px-4 py-2"
+                    className="flex items-center justify-between rounded-lg border px-3 sm:px-4 py-2"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm">
-                        <div className="font-medium">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                      <div className="text-sm min-w-0">
+                        <div className="font-medium text-xs sm:text-sm">
                           {formatDate(session.date)}
                         </div>
-                        <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                        <div className="text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-[11px] sm:text-xs">
                           <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
+                            <Clock className="h-3 w-3 shrink-0" />
                             {session.startTime} - {session.endTime}
                           </span>
                           <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {session.location}
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{session.location}</span>
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-2">
                       {myEntry ? (
                         <div className="flex items-center gap-1">
                           {STATUS_ICONS[myEntry.status]}
-                          <span className="text-xs capitalize">
+                          <span className="text-[11px] sm:text-xs capitalize">
                             {myEntry.status}
                           </span>
                         </div>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px] sm:text-xs text-muted-foreground">
                           No response
                         </Badge>
                       )}

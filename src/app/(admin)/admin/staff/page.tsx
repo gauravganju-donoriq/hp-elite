@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Users, KeyRound } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, KeyRound, UserPlus } from "lucide-react";
 import type { StaffRole } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -63,6 +63,12 @@ export default function StaffManagementPage() {
   const [role, setRole] = useState<StaffRole>("assistant-coach");
   const [yearsExperience, setYearsExperience] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkStaffId, setLinkStaffId] = useState<string | null>(null);
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linkPassword, setLinkPassword] = useState("");
+  const [linking, setLinking] = useState(false);
 
   const sortedStaff = [...staff].sort(
     (a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
@@ -152,6 +158,46 @@ export default function StaffManagementPage() {
     if (!member) return;
     removeStaff(id);
     toast.success(`${member.firstName} ${member.lastName} removed.`);
+  }
+
+  function openLinkAccount(id: string) {
+    setLinkStaffId(id);
+    setLinkEmail("");
+    setLinkPassword("");
+    setLinkDialogOpen(true);
+  }
+
+  async function handleLinkAccount() {
+    if (!linkStaffId || !linkEmail.trim() || !linkPassword.trim()) {
+      toast.error("Email and password are required.");
+      return;
+    }
+
+    setLinking(true);
+    try {
+      const res = await fetch("/api/admin/link-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: linkStaffId,
+          email: linkEmail.trim(),
+          password: linkPassword.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to link account");
+      }
+
+      await refreshAll();
+      toast.success("Login account created and linked.");
+      setLinkDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to link account.");
+    } finally {
+      setLinking(false);
+    }
   }
 
   const roleCounts = staff.reduce(
@@ -332,7 +378,15 @@ export default function StaffManagementPage() {
                         Linked
                       </Badge>
                     ) : (
-                      <span className="text-xs text-muted-foreground">No account</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => openLinkAccount(member.id)}
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Link Account
+                      </Button>
                     )}
                   </TableCell>
                   <TableCell>
@@ -360,6 +414,52 @@ export default function StaffManagementPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Link Login Account
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Create a login account for{" "}
+            <span className="font-medium text-foreground">
+              {staff.find((s) => s.id === linkStaffId)?.firstName}{" "}
+              {staff.find((s) => s.id === linkStaffId)?.lastName}
+            </span>
+            . They will use these credentials to sign in and set their availability.
+          </p>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={linkEmail}
+                onChange={(e) => setLinkEmail(e.target.value)}
+                placeholder="staff@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={linkPassword}
+                onChange={(e) => setLinkPassword(e.target.value)}
+                placeholder="Set a password"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleLinkAccount} disabled={linking}>
+                {linking ? "Creating..." : "Create Account"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -29,8 +29,10 @@ import {
   MapPin,
   XCircle,
   HelpCircle,
-  CalendarDays,
   Zap,
+  Info,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import type { AvailabilityStatus, Session } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,40 +44,54 @@ const STATUS_CONFIG: Record<
   AvailabilityStatus,
   {
     label: string;
+    description: string;
     icon: React.ReactNode;
     btnClass: string;
+    btnTint: string;
     cellBg: string;
     dot: string;
+    badgeClass: string;
   }
 > = {
   available: {
     label: "Available",
+    description: "I can work this session",
     icon: <CheckCircle2 className="h-4 w-4" />,
-    btnClass: "border-green-400 bg-green-50 text-green-700 hover:bg-green-100",
-    cellBg: "bg-green-50/80 dark:bg-green-950/20",
+    btnClass: "border-green-500 bg-green-100 text-green-800 hover:bg-green-200 shadow-sm",
+    btnTint: "border-green-200 bg-green-50/60 text-green-700 hover:bg-green-100",
+    cellBg: "bg-green-50 dark:bg-green-950/30",
     dot: "bg-green-500",
+    badgeClass: "bg-green-200 text-green-900 border-green-400",
   },
   unavailable: {
     label: "Unavailable",
+    description: "I cannot work this session",
     icon: <XCircle className="h-4 w-4" />,
-    btnClass: "border-red-400 bg-red-50 text-red-700 hover:bg-red-100",
-    cellBg: "bg-red-50/80 dark:bg-red-950/20",
+    btnClass: "border-red-500 bg-red-100 text-red-800 hover:bg-red-200 shadow-sm",
+    btnTint: "border-red-200 bg-red-50/60 text-red-700 hover:bg-red-100",
+    cellBg: "bg-red-50 dark:bg-red-950/30",
     dot: "bg-red-500",
+    badgeClass: "bg-red-200 text-red-900 border-red-400",
   },
   maybe: {
     label: "Maybe",
+    description: "I might be able to work",
     icon: <HelpCircle className="h-4 w-4" />,
-    btnClass:
-      "border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100",
-    cellBg: "bg-amber-50/80 dark:bg-yellow-950/20",
+    btnClass: "border-yellow-500 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 shadow-sm",
+    btnTint: "border-yellow-200 bg-yellow-50/60 text-yellow-700 hover:bg-yellow-100",
+    cellBg: "bg-amber-50 dark:bg-yellow-950/30",
     dot: "bg-yellow-500",
+    badgeClass: "bg-yellow-200 text-yellow-900 border-yellow-400",
   },
   pending: {
     label: "Not Set",
+    description: "You haven't responded yet",
     icon: <Clock className="h-4 w-4" />,
     btnClass: "border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100",
+    btnTint: "border-gray-200 bg-gray-50/60 text-gray-500 hover:bg-gray-100",
     cellBg: "",
     dot: "bg-gray-300",
+    badgeClass: "bg-gray-200 text-gray-600 border-gray-400",
   },
 };
 
@@ -118,22 +134,35 @@ function monthLabel(dateStr: string) {
   });
 }
 
+function formatFullDate(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatShortDate(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function AvailabilityPage() {
   const router = useRouter();
   const { identity, loading: identityLoading } = useStaffIdentity();
   const { staff, schedules, availability, setAvailability, loading: dataLoading } = useScheduling();
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [openPopover, setOpenPopover] = useState<string | null>(null);
+  const [expandedMobileSession, setExpandedMobileSession] = useState<string | null>(null);
 
   useEffect(() => {
     if (!identityLoading && !identity) router.replace("/login");
   }, [identity, identityLoading, router]);
 
-  useEffect(() => {
-    if (schedules.length > 0 && !selectedSchedule) {
-      setSelectedSchedule(schedules[0].id);
-    }
-  }, [schedules, selectedSchedule]);
+  const activeScheduleId = selectedSchedule || (schedules.length > 0 ? schedules[0].id : "");
 
   if (identityLoading || dataLoading) {
     return (
@@ -148,7 +177,7 @@ export default function AvailabilityPage() {
   const currentStaff = staff.find((s) => s.id === identity.staffId);
   if (!currentStaff) return null;
 
-  const schedule = schedules.find((s) => s.id === selectedSchedule);
+  const schedule = schedules.find((s) => s.id === activeScheduleId);
   const sessions = schedule
     ? [...schedule.sessions].sort((a, b) => a.date.localeCompare(b.date))
     : [];
@@ -222,126 +251,297 @@ export default function AvailabilityPage() {
     sessions.length > 0 ? Math.round((responded / sessions.length) * 100) : 0;
   const todayStr = new Date().toISOString().split("T")[0];
 
+  function renderStatusButtons(session: Session, entry: ReturnType<typeof myAvailMap.get>, mobile?: boolean) {
+    return (
+      <div className={cn("grid grid-cols-3", mobile ? "gap-2" : "gap-1.5")}>
+        {(["available", "unavailable", "maybe"] as AvailabilityStatus[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => {
+              handleStatusChange(session.id, s);
+              if (s !== "available") {
+                setOpenPopover(null);
+                setExpandedMobileSession(null);
+              }
+            }}
+            className={cn(
+              "flex flex-col items-center rounded-lg border-2 font-medium transition-all",
+              mobile ? "gap-1.5 px-3 py-3.5 text-sm" : "gap-1 px-2 py-2.5 text-xs",
+              entry?.status === s
+                ? STATUS_CONFIG[s].btnClass
+                : STATUS_CONFIG[s].btnTint
+            )}
+          >
+            {mobile
+              ? <span className="[&>svg]:h-5 [&>svg]:w-5">{STATUS_CONFIG[s].icon}</span>
+              : STATUS_CONFIG[s].icon}
+            {STATUS_CONFIG[s].label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderCustomTime(session: Session, entry: ReturnType<typeof myAvailMap.get>) {
+    if (entry?.status !== "available") return null;
+    return (
+      <div className="space-y-1.5 mt-2">
+        <Label className="text-xs font-medium text-muted-foreground">
+          Available for a different time? (optional)
+        </Label>
+        <div className="flex items-center gap-2">
+          <Input
+            className="h-8 text-xs"
+            placeholder="e.g. 5:00 PM"
+            value={entry.customStartTime || ""}
+            onChange={(e) =>
+              handleCustomTimeChange(session.id, "customStartTime", e.target.value)
+            }
+          />
+          <span className="text-muted-foreground text-xs shrink-0">to</span>
+          <Input
+            className="h-8 text-xs"
+            placeholder="e.g. 8:00 PM"
+            value={entry.customEndTime || ""}
+            onChange={(e) =>
+              handleCustomTimeChange(session.id, "customEndTime", e.target.value)
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <CalendarDays className="h-8 w-8 text-primary" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
             My Availability
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Tap any day to set your availability for that session.
+          <p className="text-sm text-muted-foreground mt-1">
+            Hi {currentStaff.firstName} -- let your admin know when you can work.
           </p>
         </div>
 
         {schedules.length > 1 && (
-          <Select value={selectedSchedule} onValueChange={setSelectedSchedule}>
-            <SelectTrigger className="w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {schedules.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-muted-foreground">Pick Schedule</Label>
+            <Select value={activeScheduleId} onValueChange={setSelectedSchedule}>
+              <SelectTrigger className="w-full sm:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {schedules.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </div>
 
       {schedule && (
         <>
-          {/* Stats + Quick Actions */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* How it works banner */}
+          {counts.pending > 0 && counts.pending === sessions.length && (
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardContent className="py-3 sm:py-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-blue-900">How to set your availability</p>
+                    <ol className="text-xs text-blue-800/80 space-y-0.5 list-decimal list-inside">
+                      <li>Tap any session below to set your status</li>
+                      <li>Choose <strong>Available</strong>, <strong>Maybe</strong>, or <strong>Unavailable</strong></li>
+                      <li>Use <strong>Quick Actions</strong> to set all days at once</li>
+                    </ol>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Stats */}
+          <Card>
+            <CardContent className="py-3 sm:py-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">
+                  {responded} of {sessions.length} sessions
+                </span>
+                <span className="text-sm font-semibold text-primary">
+                  {pct}%
+                </span>
+              </div>
+              <div className="h-3 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-4 mt-3 text-xs sm:text-sm">
+                {(
+                  ["available", "unavailable", "maybe", "pending"] as AvailabilityStatus[]
+                ).map((s) => (
+                  <div key={s} className="flex items-center gap-1.5">
+                    <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", STATUS_CONFIG[s].dot)} />
+                    <span className="text-muted-foreground">
+                      {counts[s]} {STATUS_CONFIG[s].label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
+          {counts.pending > 0 && (
             <Card>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">
-                    {responded} of {sessions.length} sessions
-                  </span>
-                  <span className="text-sm font-semibold text-primary">
-                    {pct}%
-                  </span>
+              <CardContent className="py-3 sm:py-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Quick Actions</span>
                 </div>
-                <div className="h-3 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <div className="flex items-center gap-4 mt-3 text-sm">
-                  {(
-                    [
-                      "available",
-                      "unavailable",
-                      "maybe",
-                      "pending",
-                    ] as AvailabilityStatus[]
-                  ).map((s) => (
-                    <div key={s} className="flex items-center gap-1.5">
-                      <span
-                        className={cn(
-                          "h-2.5 w-2.5 rounded-full",
-                          STATUS_CONFIG[s].dot
-                        )}
-                      />
-                      <span className="text-muted-foreground tabular-nums">
-                        {counts[s]}
-                      </span>
-                    </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Set all {counts.pending} remaining session{counts.pending !== 1 ? "s" : ""} at once:
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["available", "unavailable", "maybe"] as AvailabilityStatus[]).map((s) => (
+                    <Button
+                      key={s}
+                      size="sm"
+                      variant="outline"
+                      className="text-xs gap-1 h-9"
+                      onClick={() => handleBulkSet(s)}
+                    >
+                      {STATUS_CONFIG[s].icon}
+                      <span className="hidden sm:inline">Mark All</span> {STATUS_CONFIG[s].label}
+                    </Button>
                   ))}
                 </div>
               </CardContent>
             </Card>
-
-            {counts.pending > 0 && (
-              <Card>
-                <CardContent className="py-4 flex flex-col justify-center h-full">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Quick Actions</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Set all {counts.pending} remaining sessions at once:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(
-                      ["available", "unavailable", "maybe"] as AvailabilityStatus[]
-                    ).map((s) => (
-                      <Button
-                        key={s}
-                        size="sm"
-                        variant="outline"
-                        className="text-xs gap-1.5"
-                        onClick={() => handleBulkSet(s)}
-                      >
-                        {STATUS_CONFIG[s].icon}
-                        All {STATUS_CONFIG[s].label}
-                      </Button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          )}
 
           {/* Schedule title */}
           <div className="text-center">
-            <h2 className="text-lg font-semibold">{schedule.name}</h2>
-            {schedule.description && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {schedule.description}
-              </p>
-            )}
+            <h2 className="text-base sm:text-lg font-semibold">{schedule.name}</h2>
           </div>
 
-          {/* Calendar */}
-          <Card className="overflow-hidden">
+          {/* ===== MOBILE: Session list ===== */}
+          <div className="md:hidden space-y-3">
+            {(() => {
+              let lastMonth = "";
+              return sessions.map((session) => {
+                const entry = myAvailMap.get(session.id);
+                const status: AvailabilityStatus = entry?.status ?? "pending";
+                const cfg = STATUS_CONFIG[status];
+                const isExpanded = expandedMobileSession === session.id;
+                const isToday = session.date === todayStr;
+                const sessionMonth = new Date(session.date + "T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                const showMonthHeader = sessionMonth !== lastMonth;
+                if (showMonthHeader) lastMonth = sessionMonth;
+
+                return (
+                  <div key={session.id}>
+                    {showMonthHeader && (
+                      <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground pt-2 pb-1 px-1">
+                        {sessionMonth}
+                      </div>
+                    )}
+                    <Card
+                      className={cn(
+                        "overflow-hidden transition-all",
+                        cfg.cellBg,
+                        isToday && "ring-2 ring-primary",
+                        status === "pending" && !isExpanded && "border-dashed border-muted-foreground/30"
+                      )}
+                    >
+                      <button
+                        className="w-full text-left px-4 py-3.5 active:bg-accent/50 transition-colors"
+                        onClick={() => setExpandedMobileSession(isExpanded ? null : session.id)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-base font-bold">
+                                {formatShortDate(session.date)}
+                              </span>
+                              {isToday && (
+                                <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-semibold">
+                                  Today
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5 shrink-0" />
+                                {session.startTime} – {session.endTime}
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{session.location}</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border",
+                              cfg.badgeClass
+                            )}>
+                              {cfg.icon}
+                              {status === "pending" ? "Tap to set" : cfg.label}
+                            </span>
+                            {isExpanded
+                              ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          </div>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-3 border-t space-y-4 bg-muted/30">
+                          <div>
+                            <Label className="text-sm font-medium block mb-2">
+                              Can you work this session?
+                            </Label>
+                            {renderStatusButtons(session, entry, true)}
+                          </div>
+
+                          {entry?.status && entry.status !== "pending" && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className={cn("h-2.5 w-2.5 rounded-full", cfg.dot)} />
+                              <span className="text-muted-foreground">
+                                You selected: <strong>{cfg.label}</strong>
+                              </span>
+                            </div>
+                          )}
+
+                          {renderCustomTime(session, entry)}
+
+                          <Button
+                            size="sm"
+                            className="w-full h-10 text-sm"
+                            onClick={() => setExpandedMobileSession(null)}
+                          >
+                            Done
+                          </Button>
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* ===== DESKTOP: Calendar grid ===== */}
+          <Card className="overflow-hidden hidden md:block">
             <CardContent className="p-0">
-              {/* Day-of-week header */}
               <div className="grid grid-cols-7 border-b bg-muted/40">
                 {DAY_NAMES.map((d) => (
                   <div
@@ -353,7 +553,6 @@ export default function AvailabilityPage() {
                 ))}
               </div>
 
-              {/* Week rows */}
               <div className="divide-y">
                 {weeks.map((week, wi) => {
                   const showMonth =
@@ -375,16 +574,14 @@ export default function AvailabilityPage() {
                       )}
                       <div className="grid grid-cols-7">
                         {week.map(({ date, session }, di) => {
-                          const dayNum = new Date(
-                            date + "T12:00:00"
-                          ).getDate();
+                          const dayNum = new Date(date + "T12:00:00").getDate();
                           const isToday = date === todayStr;
 
                           if (!session) {
                             return (
                               <div
                                 key={di}
-                                className="min-h-[110px] border-r last:border-r-0 bg-muted/10 p-2 opacity-40"
+                                className="min-h-[120px] border-r last:border-r-0 bg-muted/10 p-2 opacity-40"
                               >
                                 <span className="text-xs text-muted-foreground">
                                   {dayNum}
@@ -409,13 +606,12 @@ export default function AvailabilityPage() {
                               <PopoverTrigger asChild>
                                 <button
                                   className={cn(
-                                    "min-h-[110px] border-r last:border-r-0 p-2 text-left transition-all relative group",
+                                    "min-h-[120px] border-r last:border-r-0 p-2 text-left transition-all relative group",
                                     "hover:ring-2 hover:ring-inset hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
                                     cfg.cellBg,
                                     isToday && "ring-2 ring-inset ring-primary"
                                   )}
                                 >
-                                  {/* Day number + status icon */}
                                   <div className="flex items-start justify-between">
                                     <span
                                       className={cn(
@@ -427,14 +623,8 @@ export default function AvailabilityPage() {
                                     >
                                       {dayNum}
                                     </span>
-                                    {status !== "pending" && (
-                                      <span className="mt-0.5 opacity-80">
-                                        {cfg.icon}
-                                      </span>
-                                    )}
                                   </div>
 
-                                  {/* Session info */}
                                   <div className="mt-1.5 space-y-0.5">
                                     <div className="text-[11px] leading-tight font-medium text-muted-foreground flex items-center gap-1">
                                       <Clock className="h-3 w-3 shrink-0" />
@@ -451,20 +641,20 @@ export default function AvailabilityPage() {
                                     </div>
                                   </div>
 
+                                  <div className="mt-2">
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border",
+                                      cfg.badgeClass
+                                    )}>
+                                      {cfg.icon}
+                                      {status === "pending" ? "Tap to set" : cfg.label}
+                                    </span>
+                                  </div>
+
                                   {entry?.customStartTime && (
                                     <div className="mt-1 text-[10px] text-muted-foreground/70 italic truncate">
                                       Custom: {entry.customStartTime}
-                                      {entry.customEndTime &&
-                                        `–${entry.customEndTime}`}
-                                    </div>
-                                  )}
-
-                                  {/* Hover hint for pending */}
-                                  {status === "pending" && (
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/60 rounded">
-                                      <span className="text-xs font-medium text-primary">
-                                        Set status
-                                      </span>
+                                      {entry.customEndTime && `–${entry.customEndTime}`}
                                     </div>
                                   )}
                                 </button>
@@ -474,24 +664,18 @@ export default function AvailabilityPage() {
                                 className="w-72"
                                 side="bottom"
                                 align="center"
+                                collisionPadding={16}
+                                avoidCollisions
                               >
                                 <div className="space-y-3">
-                                  {/* Date header */}
                                   <div>
                                     <div className="font-semibold">
-                                      {new Date(
-                                        session.date + "T12:00:00"
-                                      ).toLocaleDateString("en-US", {
-                                        weekday: "long",
-                                        month: "long",
-                                        day: "numeric",
-                                      })}
+                                      {formatFullDate(session.date)}
                                     </div>
                                     <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
                                       <span className="flex items-center gap-1">
                                         <Clock className="h-3 w-3" />
-                                        {session.startTime} -{" "}
-                                        {session.endTime}
+                                        {session.startTime} - {session.endTime}
                                       </span>
                                       <span className="flex items-center gap-1">
                                         <MapPin className="h-3 w-3" />
@@ -500,78 +684,22 @@ export default function AvailabilityPage() {
                                     </div>
                                   </div>
 
-                                  {/* Status buttons */}
                                   <div className="space-y-1.5">
                                     <Label className="text-xs font-medium text-muted-foreground">
-                                      Your availability
+                                      Can you work this session?
                                     </Label>
-                                    <div className="grid grid-cols-3 gap-1.5">
-                                      {(
-                                        [
-                                          "available",
-                                          "unavailable",
-                                          "maybe",
-                                        ] as AvailabilityStatus[]
-                                      ).map((s) => (
-                                        <button
-                                          key={s}
-                                          onClick={() =>
-                                            handleStatusChange(session.id, s)
-                                          }
-                                          className={cn(
-                                            "flex flex-col items-center gap-1 rounded-lg border-2 px-2 py-2.5 text-xs font-medium transition-all",
-                                            entry?.status === s
-                                              ? STATUS_CONFIG[s].btnClass
-                                              : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
-                                          )}
-                                        >
-                                          {STATUS_CONFIG[s].icon}
-                                          {STATUS_CONFIG[s].label}
-                                        </button>
-                                      ))}
-                                    </div>
+                                    {renderStatusButtons(session, entry)}
                                   </div>
 
-                                  {/* Custom time */}
+                                  {renderCustomTime(session, entry)}
                                   {entry?.status === "available" && (
-                                    <div className="space-y-1.5">
-                                      <Label className="text-xs font-medium text-muted-foreground">
-                                        Custom time (optional)
-                                      </Label>
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          className="h-8 text-xs"
-                                          placeholder="From"
-                                          value={
-                                            entry.customStartTime || ""
-                                          }
-                                          onChange={(e) =>
-                                            handleCustomTimeChange(
-                                              session.id,
-                                              "customStartTime",
-                                              e.target.value
-                                            )
-                                          }
-                                        />
-                                        <span className="text-muted-foreground text-xs shrink-0">
-                                          &ndash;
-                                        </span>
-                                        <Input
-                                          className="h-8 text-xs"
-                                          placeholder="To"
-                                          value={
-                                            entry.customEndTime || ""
-                                          }
-                                          onChange={(e) =>
-                                            handleCustomTimeChange(
-                                              session.id,
-                                              "customEndTime",
-                                              e.target.value
-                                            )
-                                          }
-                                        />
-                                      </div>
-                                    </div>
+                                    <Button
+                                      size="sm"
+                                      className="w-full h-7 text-xs mt-1"
+                                      onClick={() => setOpenPopover(null)}
+                                    >
+                                      Done
+                                    </Button>
                                   )}
                                 </div>
                               </PopoverContent>
@@ -586,19 +714,12 @@ export default function AvailabilityPage() {
             </CardContent>
           </Card>
 
-          {/* Legend */}
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground pb-4">
-            {(
-              ["available", "unavailable", "maybe", "pending"] as AvailabilityStatus[]
-            ).map((s) => (
+          {/* Legend - desktop only */}
+          <div className="hidden md:flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground pb-4">
+            {(["available", "unavailable", "maybe", "pending"] as AvailabilityStatus[]).map((s) => (
               <div key={s} className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "h-3 w-3 rounded-full",
-                    STATUS_CONFIG[s].dot
-                  )}
-                />
-                <span>{STATUS_CONFIG[s].label}</span>
+                <span className={cn("h-3 w-3 rounded-full", STATUS_CONFIG[s].dot)} />
+                <span>{STATUS_CONFIG[s].label} -- {STATUS_CONFIG[s].description}</span>
               </div>
             ))}
           </div>

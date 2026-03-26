@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, LogOut } from "lucide-react";
+import { CalendarCheck, LogOut, Menu, X, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStaffIdentity } from "@/lib/staff-context";
 import { useScheduling } from "@/lib/context";
@@ -15,6 +16,7 @@ export function StaffNavbar() {
   const { identity, userName } = useStaffIdentity();
   const { staff } = useScheduling();
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const currentStaff = identity
     ? staff.find((s) => s.id === identity.staffId)
@@ -32,7 +34,7 @@ export function StaffNavbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <div className="flex h-14 items-center px-4 sm:px-6 lg:px-8">
+      <div className="flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/dashboard"
           className="flex items-center gap-2 font-bold text-lg"
@@ -46,7 +48,9 @@ export function StaffNavbar() {
             priority
           />
         </Link>
-        <nav className="ml-auto flex items-center gap-4 text-sm">
+
+        {/* Desktop nav */}
+        <nav className="hidden sm:flex items-center gap-4 text-sm">
           <Link
             href="/dashboard"
             className={cn(
@@ -84,7 +88,63 @@ export function StaffNavbar() {
             <LogOut className="h-4 w-4" />
           </Button>
         </nav>
+
+        {/* Mobile hamburger */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="sm:hidden"
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
       </div>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div className="sm:hidden border-t bg-background px-4 pb-4 pt-2 space-y-1">
+          {displayName && (
+            <div className="px-3 py-2 text-sm font-medium text-muted-foreground border-b mb-2 pb-2">
+              {displayName}
+            </div>
+          )}
+          <Link
+            href="/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+              pathname === "/dashboard"
+                ? "bg-accent text-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Dashboard
+          </Link>
+          {identity && (
+            <Link
+              href="/availability"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                pathname === "/availability"
+                  ? "bg-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+            >
+              <CalendarCheck className="h-4 w-4" />
+              My Availability
+            </Link>
+          )}
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground w-full text-left"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </button>
+        </div>
+      )}
     </header>
   );
 }
