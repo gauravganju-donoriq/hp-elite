@@ -32,6 +32,7 @@ import {
   Zap,
   Info,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
 } from "lucide-react";
 import type { AvailabilityStatus, Session } from "@/lib/types";
@@ -128,12 +129,6 @@ function buildCalendarWeeks(sessions: Session[]): WeekRow[] {
   return weeks;
 }
 
-function monthLabel(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    month: "short",
-  });
-}
-
 function formatFullDate(dateStr: string) {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -157,6 +152,8 @@ export default function AvailabilityPage() {
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [openPopover, setOpenPopover] = useState<string | null>(null);
   const [expandedMobileSession, setExpandedMobileSession] = useState<string | null>(null);
+  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
+  const [viewMonthIdx, setViewMonthIdx] = useState(() => new Date().getMonth());
 
   useEffect(() => {
     if (!identityLoading && !identity) router.replace("/login");
@@ -182,7 +179,65 @@ export default function AvailabilityPage() {
     ? [...schedule.sessions].sort((a, b) => a.date.localeCompare(b.date))
     : [];
 
-  const weeks = buildCalendarWeeks(sessions);
+  const allWeeks = buildCalendarWeeks(sessions);
+
+  function goToPrevMonth() {
+    if (viewMonthIdx === 0) {
+      setViewYear((y) => y - 1);
+      setViewMonthIdx(11);
+    } else {
+      setViewMonthIdx((m) => m - 1);
+    }
+  }
+
+  function goToNextMonth() {
+    if (viewMonthIdx === 11) {
+      setViewYear((y) => y + 1);
+      setViewMonthIdx(0);
+    } else {
+      setViewMonthIdx((m) => m + 1);
+    }
+  }
+
+  function goToToday() {
+    const now = new Date();
+    setViewYear(now.getFullYear());
+    setViewMonthIdx(now.getMonth());
+  }
+
+  const weeks = allWeeks.filter((week) =>
+    week.some((day) => {
+      const d = new Date(day.date + "T12:00:00");
+      return d.getFullYear() === viewYear && d.getMonth() === viewMonthIdx;
+    })
+  );
+
+  const viewMonthLabel = new Date(viewYear, viewMonthIdx).toLocaleDateString(
+    "en-US",
+    { month: "long", year: "numeric" }
+  );
+
+  const filteredMobileSessions = sessions.filter((s) => {
+    const d = new Date(s.date + "T12:00:00");
+    return d.getFullYear() === viewYear && d.getMonth() === viewMonthIdx;
+  });
+
+  const sessionMonths = new Set(
+    sessions.map((s) => {
+      const d = new Date(s.date + "T12:00:00");
+      return `${d.getFullYear()}-${d.getMonth()}`;
+    })
+  );
+  const hasPrevMonth = sessionMonths.has(
+    viewMonthIdx === 0
+      ? `${viewYear - 1}-11`
+      : `${viewYear}-${viewMonthIdx - 1}`
+  );
+  const hasNextMonth = sessionMonths.has(
+    viewMonthIdx === 11
+      ? `${viewYear + 1}-0`
+      : `${viewYear}-${viewMonthIdx + 1}`
+  );
 
   const myAvailMap = new Map(
     availability
@@ -426,32 +481,60 @@ export default function AvailabilityPage() {
             </Card>
           )}
 
-          {/* Schedule title */}
-          <div className="text-center">
-            <h2 className="text-base sm:text-lg font-semibold">{schedule.name}</h2>
+          {/* Month navigation */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={goToPrevMonth}
+                disabled={!hasPrevMonth}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs hidden sm:inline-flex"
+                onClick={goToToday}
+              >
+                Today
+              </Button>
+            </div>
+            <div className="text-center">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight">
+                {viewMonthLabel}
+              </h2>
+              <p className="text-xs text-muted-foreground">{schedule.name}</p>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={goToNextMonth}
+              disabled={!hasNextMonth}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
 
           {/* ===== MOBILE: Session list ===== */}
           <div className="md:hidden space-y-3">
-            {(() => {
-              let lastMonth = "";
-              return sessions.map((session) => {
+            {filteredMobileSessions.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-8">
+                No sessions this month.
+              </p>
+            )}
+            {filteredMobileSessions.map((session) => {
                 const entry = myAvailMap.get(session.id);
                 const status: AvailabilityStatus = entry?.status ?? "pending";
                 const cfg = STATUS_CONFIG[status];
                 const isExpanded = expandedMobileSession === session.id;
                 const isToday = session.date === todayStr;
-                const sessionMonth = new Date(session.date + "T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                const showMonthHeader = sessionMonth !== lastMonth;
-                if (showMonthHeader) lastMonth = sessionMonth;
 
                 return (
                   <div key={session.id}>
-                    {showMonthHeader && (
-                      <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground pt-2 pb-1 px-1">
-                        {sessionMonth}
-                      </div>
-                    )}
                     <Card
                       className={cn(
                         "overflow-hidden transition-all",
@@ -535,8 +618,7 @@ export default function AvailabilityPage() {
                     </Card>
                   </div>
                 );
-              });
-            })()}
+            })}
           </div>
 
           {/* ===== DESKTOP: Calendar grid ===== */}
@@ -554,24 +636,14 @@ export default function AvailabilityPage() {
               </div>
 
               <div className="divide-y">
+                {weeks.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-12">
+                    No sessions this month.
+                  </p>
+                )}
                 {weeks.map((week, wi) => {
-                  const showMonth =
-                    wi === 0 ||
-                    monthLabel(week[0].date) !==
-                      monthLabel(weeks[wi - 1][0].date);
-
                   return (
                     <div key={wi}>
-                      {showMonth && (
-                        <div className="px-3 py-1.5 bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
-                          {new Date(
-                            week[0].date + "T12:00:00"
-                          ).toLocaleDateString("en-US", {
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </div>
-                      )}
                       <div className="grid grid-cols-7">
                         {week.map(({ date, session }, di) => {
                           const dayNum = new Date(date + "T12:00:00").getDate();
