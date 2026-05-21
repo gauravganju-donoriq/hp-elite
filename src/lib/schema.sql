@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS staff (
   user_id TEXT,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('head-coach', 'assistant-coach', 'volunteer', 'intern')),
+  role TEXT NOT NULL CHECK (role IN ('lead', 'experience', 'junior', 'trial')),
   years_experience INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -59,3 +59,19 @@ CREATE TABLE IF NOT EXISTS session_slot (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_slot_session ON session_slot(session_id);
+
+CREATE TABLE IF NOT EXISTS report (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  schedule_id TEXT NOT NULL REFERENCES schedule(id) ON DELETE CASCADE,
+  schedule_name TEXT NOT NULL,
+  period_type TEXT NOT NULL CHECK (period_type IN ('weekly', 'monthly')),
+  scope TEXT NOT NULL CHECK (scope IN ('breakdown', 'single')),
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  payload JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_schedule ON report(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_report_generated_at ON report(generated_at DESC);

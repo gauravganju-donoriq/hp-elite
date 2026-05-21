@@ -9,6 +9,11 @@ import type {
   StaffRole,
   AutoAssignConflict,
   AutoAssignResult,
+  Report,
+  ReportPayload,
+  ReportPeriodType,
+  ReportScope,
+  ReportSummary,
 } from "./types";
 
 // --------------- Staff ---------------
@@ -456,17 +461,17 @@ export async function unassignSlot(slotId: string): Promise<boolean> {
 }
 
 const ROLE_PRIORITY: Record<StaffRole, number> = {
-  "head-coach": 0,
-  "assistant-coach": 1,
-  volunteer: 2,
-  intern: 3,
+  lead: 0,
+  experience: 1,
+  junior: 2,
+  trial: 3,
 };
 
-export async function autoAssignAll(
-  scheduleId: string
+export async function autoAssignSession(
+  sessionId: string
 ): Promise<AutoAssignResult> {
-  const schedule = await getScheduleById(scheduleId);
-  if (!schedule) return { assigned: 0, empty: 0, conflicts: [] };
+  const session = await getSessionById(sessionId);
+  if (!session) return { assigned: 0, empty: 0, conflicts: [] };
 
   const allStaff = await getAllStaff();
   const allAvailability = await getAllAvailability();
@@ -479,6 +484,8 @@ export async function autoAssignAll(
     }
   }
 
+  const sessionSlots = allSlots.filter((s) => s.sessionId === session.id);
+
   let totalAssigned = 0;
   let totalEmpty = 0;
   const conflicts: AutoAssignConflict[] = [];
@@ -487,102 +494,98 @@ export async function autoAssignAll(
   try {
     await client.query("BEGIN");
 
-    for (const session of schedule.sessions) {
-      const sessionSlots = allSlots.filter((s) => s.sessionId === session.id);
-
-      if (sessionSlots.length < session.requiredStaff) {
-        for (let i = sessionSlots.length; i < session.requiredStaff; i++) {
-          const newSlot: SessionSlot = {
-            id: `slot-${session.id}-${i}`,
-            sessionId: session.id,
-            slotIndex: i,
-          };
-          await client.query(
-            `INSERT INTO session_slot (id, session_id, slot_index) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
-            [newSlot.id, newSlot.sessionId, newSlot.slotIndex]
-          );
-          sessionSlots.push(newSlot);
-        }
-      }
-
-      const alreadyAssigned = new Set<string>();
-      for (const slot of sessionSlots) {
-        if (slot.assignedStaffId) alreadyAssigned.add(slot.assignedStaffId);
-      }
-
-      const sessionAvailability = allAvailability.filter(
-        (a) => a.sessionId === session.id
-      );
-      const availableCount = sessionAvailability.filter(
-        (a) => a.status === "available"
-      ).length;
-      const maybeCount = sessionAvailability.filter(
-        (a) => a.status === "maybe"
-      ).length;
-
-      const availableStaff = allStaff
-        .filter((member) => {
-          if (alreadyAssigned.has(member.id)) return false;
-          const avail = sessionAvailability.find(
-            (a) => a.staffId === member.id
-          );
-          return avail?.status === "available";
-        })
-        .sort((a, b) => {
-          const expDiff = (b.yearsExperience ?? 0) - (a.yearsExperience ?? 0);
-          if (expDiff !== 0) return expDiff;
-          const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
-          if (roleDiff !== 0) return roleDiff;
-          return (assignmentCounts.get(a.id) || 0) - (assignmentCounts.get(b.id) || 0);
-        });
-
-      let staffIdx = 0;
-      let sessionUnfilled = 0;
-      for (const slot of sessionSlots) {
-        if (slot.assignedStaffId) continue;
-        if (staffIdx < availableStaff.length) {
-          await client.query(
-            `UPDATE session_slot SET assigned_staff_id = $1 WHERE id = $2`,
-            [availableStaff[staffIdx].id, slot.id]
-          );
-          assignmentCounts.set(
-            availableStaff[staffIdx].id,
-            (assignmentCounts.get(availableStaff[staffIdx].id) || 0) + 1
-          );
-          totalAssigned++;
-          staffIdx++;
-        } else {
-          totalEmpty++;
-          sessionUnfilled++;
-        }
-      }
-
-      if (sessionUnfilled > 0) {
-        const assignedCount = session.requiredStaff - sessionUnfilled;
-        let reason: string;
-        if (availableCount === 0 && maybeCount === 0) {
-          reason = `No staff have responded with availability for this session. Ask staff to update their availability.`;
-        } else if (availableCount < session.requiredStaff && maybeCount > 0) {
-          reason = `Only ${availableCount} of ${session.requiredStaff} staff marked available (${maybeCount} marked maybe). Manually assign staff who marked 'maybe', or ask more staff to confirm availability.`;
-        } else {
-          reason = `Only ${availableCount} staff marked available for ${session.requiredStaff} required slots. Ask more staff to update their availability.`;
-        }
-
-        conflicts.push({
+    if (sessionSlots.length < session.requiredStaff) {
+      for (let i = sessionSlots.length; i < session.requiredStaff; i++) {
+        const newSlot: SessionSlot = {
+          id: `slot-${session.id}-${i}`,
           sessionId: session.id,
-          date: session.date,
-          startTime: session.startTime,
-          endTime: session.endTime,
-          location: session.location,
-          classType: session.classType,
-          requiredStaff: session.requiredStaff,
-          assignedCount,
-          unfilledCount: sessionUnfilled,
-          availableCount,
-          maybeCount,
-          reason,
-        });
+          slotIndex: i,
+        };
+        await client.query(
+          `INSERT INTO session_slot (id, session_id, slot_index) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+          [newSlot.id, newSlot.sessionId, newSlot.slotIndex]
+        );
+        sessionSlots.push(newSlot);
       }
+    }
+
+    const alreadyAssigned = new Set<string>();
+    for (const slot of sessionSlots) {
+      if (slot.assignedStaffId) alreadyAssigned.add(slot.assignedStaffId);
+    }
+
+    const sessionAvailability = allAvailability.filter(
+      (a) => a.sessionId === session.id
+    );
+    const availableCount = sessionAvailability.filter(
+      (a) => a.status === "available"
+    ).length;
+    const maybeCount = sessionAvailability.filter(
+      (a) => a.status === "maybe"
+    ).length;
+
+    const availableStaff = allStaff
+      .filter((member) => {
+        if (alreadyAssigned.has(member.id)) return false;
+        const avail = sessionAvailability.find(
+          (a) => a.staffId === member.id
+        );
+        return avail?.status === "available";
+      })
+      .sort((a, b) => {
+        const expDiff = (b.yearsExperience ?? 0) - (a.yearsExperience ?? 0);
+        if (expDiff !== 0) return expDiff;
+        const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
+        if (roleDiff !== 0) return roleDiff;
+        return (assignmentCounts.get(a.id) || 0) - (assignmentCounts.get(b.id) || 0);
+      });
+
+    let staffIdx = 0;
+    let sessionUnfilled = 0;
+    for (const slot of sessionSlots) {
+      if (slot.assignedStaffId) continue;
+      if (staffIdx < availableStaff.length) {
+        await client.query(
+          `UPDATE session_slot SET assigned_staff_id = $1 WHERE id = $2`,
+          [availableStaff[staffIdx].id, slot.id]
+        );
+        assignmentCounts.set(
+          availableStaff[staffIdx].id,
+          (assignmentCounts.get(availableStaff[staffIdx].id) || 0) + 1
+        );
+        totalAssigned++;
+        staffIdx++;
+      } else {
+        totalEmpty++;
+        sessionUnfilled++;
+      }
+    }
+
+    if (sessionUnfilled > 0) {
+      const assignedCount = session.requiredStaff - sessionUnfilled;
+      let reason: string;
+      if (availableCount === 0 && maybeCount === 0) {
+        reason = `No staff have responded with availability for this session. Ask staff to update their availability.`;
+      } else if (availableCount < session.requiredStaff && maybeCount > 0) {
+        reason = `Only ${availableCount} of ${session.requiredStaff} staff marked available (${maybeCount} marked maybe). Manually assign staff who marked 'maybe', or ask more staff to confirm availability.`;
+      } else {
+        reason = `Only ${availableCount} staff marked available for ${session.requiredStaff} required slots. Ask more staff to update their availability.`;
+      }
+
+      conflicts.push({
+        sessionId: session.id,
+        date: session.date,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        location: session.location,
+        classType: session.classType,
+        requiredStaff: session.requiredStaff,
+        assignedCount,
+        unfilledCount: sessionUnfilled,
+        availableCount,
+        maybeCount,
+        reason,
+      });
     }
 
     await client.query("COMMIT");
@@ -602,6 +605,94 @@ function mapSlotRow(row: Record<string, unknown>): SessionSlot {
     sessionId: row.session_id as string,
     slotIndex: row.slot_index as number,
     assignedStaffId: (row.assigned_staff_id as string) || undefined,
+  };
+}
+
+// --------------- Reports ---------------
+
+export async function getAllReports(): Promise<ReportSummary[]> {
+  const { rows } = await pool.query(
+    `SELECT id, name, schedule_id, schedule_name, period_type, scope,
+            period_start, period_end, generated_at
+     FROM report ORDER BY generated_at DESC`
+  );
+  return rows.map(mapReportSummaryRow);
+}
+
+export async function getReportById(id: string): Promise<Report | null> {
+  const { rows } = await pool.query(
+    `SELECT id, name, schedule_id, schedule_name, period_type, scope,
+            period_start, period_end, generated_at, payload
+     FROM report WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ? mapReportRow(rows[0]) : null;
+}
+
+export async function createReport(report: {
+  id: string;
+  name: string;
+  scheduleId: string;
+  scheduleName: string;
+  periodType: ReportPeriodType;
+  scope: ReportScope;
+  periodStart: string;
+  periodEnd: string;
+  payload: ReportPayload;
+}): Promise<Report> {
+  const { rows } = await pool.query(
+    `INSERT INTO report
+       (id, name, schedule_id, schedule_name, period_type, scope,
+        period_start, period_end, payload)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, name, schedule_id, schedule_name, period_type, scope,
+               period_start, period_end, generated_at, payload`,
+    [
+      report.id,
+      report.name,
+      report.scheduleId,
+      report.scheduleName,
+      report.periodType,
+      report.scope,
+      report.periodStart,
+      report.periodEnd,
+      JSON.stringify(report.payload),
+    ]
+  );
+  return mapReportRow(rows[0]);
+}
+
+export async function deleteReport(id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(`DELETE FROM report WHERE id = $1`, [id]);
+  return (rowCount ?? 0) > 0;
+}
+
+function mapReportSummaryRow(row: Record<string, unknown>): ReportSummary {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    scheduleId: row.schedule_id as string,
+    scheduleName: row.schedule_name as string,
+    periodType: row.period_type as ReportPeriodType,
+    scope: row.scope as ReportScope,
+    periodStart: formatDate(row.period_start),
+    periodEnd: formatDate(row.period_end),
+    generatedAt:
+      row.generated_at instanceof Date
+        ? row.generated_at.toISOString()
+        : String(row.generated_at),
+  };
+}
+
+function mapReportRow(row: Record<string, unknown>): Report {
+  const payloadVal = row.payload;
+  const payload: ReportPayload =
+    typeof payloadVal === "string"
+      ? (JSON.parse(payloadVal) as ReportPayload)
+      : (payloadVal as ReportPayload);
+  return {
+    ...mapReportSummaryRow(row),
+    payload,
   };
 }
 

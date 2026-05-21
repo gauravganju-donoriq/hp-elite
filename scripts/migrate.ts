@@ -16,6 +16,12 @@ async function migrate() {
 
   const alterStatements = [
     `ALTER TABLE staff ADD COLUMN IF NOT EXISTS years_experience INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE staff DROP CONSTRAINT IF EXISTS staff_role_check`,
+    `UPDATE staff SET role = 'lead' WHERE role = 'head-coach'`,
+    `UPDATE staff SET role = 'experience' WHERE role = 'assistant-coach'`,
+    `UPDATE staff SET role = 'junior' WHERE role = 'volunteer'`,
+    `UPDATE staff SET role = 'trial' WHERE role = 'intern'`,
+    `ALTER TABLE staff ADD CONSTRAINT staff_role_check CHECK (role IN ('lead', 'experience', 'junior', 'trial'))`,
   ];
 
   console.log("Running migration...");

@@ -263,13 +263,13 @@ export function AvailabilityGrid({ schedule }: { schedule: Schedule }) {
                     {member.lastName}, {member.firstName}
                   </span>
                   <Badge variant="outline" className="text-[10px] px-1 py-0">
-                    {member.role === "head-coach"
-                      ? "HC"
-                      : member.role === "assistant-coach"
-                        ? "AC"
-                        : member.role === "volunteer"
-                          ? "V"
-                          : "I"}
+                    {member.role === "lead"
+                      ? "L"
+                      : member.role === "experience"
+                        ? "E"
+                        : member.role === "junior"
+                          ? "J"
+                          : "T"}
                   </Badge>
                 </div>
               </td>

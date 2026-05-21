@@ -36,17 +36,17 @@ export const SLOT_TYPE_CONFIG: Record<
 };
 
 const ROLE_LABELS: Record<StaffRole, string> = {
-  "head-coach": "HC",
-  "assistant-coach": "AC",
-  volunteer: "V",
-  intern: "I",
+  lead: "L",
+  experience: "E",
+  junior: "J",
+  trial: "T",
 };
 
 const ROLE_PRIORITY: Record<StaffRole, number> = {
-  "head-coach": 0,
-  "assistant-coach": 1,
-  volunteer: 2,
-  intern: 3,
+  lead: 0,
+  experience: 1,
+  junior: 2,
+  trial: 3,
 };
 
 interface SlotAssignmentPopoverProps {

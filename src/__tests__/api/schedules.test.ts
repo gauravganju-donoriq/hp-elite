@@ -13,7 +13,7 @@ const {
   mockGetSessionById,
   mockUpdateSession,
   mockDeleteSession,
-  mockAutoAssignAll,
+  mockAutoAssignSession,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetAllSchedules: vi.fn(),
@@ -26,7 +26,7 @@ const {
   mockGetSessionById: vi.fn(),
   mockUpdateSession: vi.fn(),
   mockDeleteSession: vi.fn(),
-  mockAutoAssignAll: vi.fn(),
+  mockAutoAssignSession: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -47,14 +47,14 @@ vi.mock("@/lib/queries", () => ({
   getSessionById: mockGetSessionById,
   updateSession: mockUpdateSession,
   deleteSession: mockDeleteSession,
-  autoAssignAll: mockAutoAssignAll,
+  autoAssignSession: mockAutoAssignSession,
 }));
 
 import { GET as listSchedules, POST as createScheduleRoute } from "@/app/api/schedules/route";
 import { GET as getSchedule, PATCH as patchSchedule, DELETE as deleteScheduleRoute } from "@/app/api/schedules/[id]/route";
 import { GET as listSessions, POST as createSessionsRoute } from "@/app/api/schedules/[id]/sessions/route";
-import { POST as autoAssignRoute } from "@/app/api/schedules/[id]/auto-assign/route";
 import { GET as getSession, PATCH as patchSession, DELETE as deleteSessionRoute } from "@/app/api/sessions/[id]/route";
+import { POST as autoAssignSessionRoute } from "@/app/api/sessions/[id]/auto-assign/route";
 
 const adminSession = { user: { id: "u1", role: "admin" } };
 const staffSession = { user: { id: "u2", role: "user" } };
@@ -318,34 +318,6 @@ describe("POST /api/schedules/[id]/sessions", () => {
   });
 });
 
-// ============ POST /api/schedules/[id]/auto-assign ============
-
-describe("POST /api/schedules/[id]/auto-assign", () => {
-  it("returns 401 when unauthenticated", async () => {
-    mockGetSession.mockResolvedValueOnce(null);
-    const req = makeRequest("/api/schedules/sch1/auto-assign", { method: "POST" });
-    const res = await autoAssignRoute(req, makeParams("sch1"));
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 403 for non-admin", async () => {
-    mockGetSession.mockResolvedValueOnce(staffSession);
-    const req = makeRequest("/api/schedules/sch1/auto-assign", { method: "POST" });
-    const res = await autoAssignRoute(req, makeParams("sch1"));
-    expect(res.status).toBe(403);
-  });
-
-  it("runs auto-assign and returns result", async () => {
-    mockGetSession.mockResolvedValueOnce(adminSession);
-    mockAutoAssignAll.mockResolvedValueOnce({ assigned: 5, empty: 1, conflicts: [] });
-    const req = makeRequest("/api/schedules/sch1/auto-assign", { method: "POST" });
-    const res = await autoAssignRoute(req, makeParams("sch1"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.assigned).toBe(5);
-  });
-});
-
 // ============ GET /api/sessions/[id] ============
 
 describe("GET /api/sessions/[id]", () => {
@@ -436,5 +408,34 @@ describe("DELETE /api/sessions/[id]", () => {
     const req = makeRequest("/api/sessions/sess1", { method: "DELETE" });
     const res = await deleteSessionRoute(req, makeParams("sess1"));
     expect(res.status).toBe(200);
+  });
+});
+
+// ============ POST /api/sessions/[id]/auto-assign ============
+
+describe("POST /api/sessions/[id]/auto-assign", () => {
+  it("returns 401 when unauthenticated", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    const req = makeRequest("/api/sessions/sess1/auto-assign", { method: "POST" });
+    const res = await autoAssignSessionRoute(req, makeParams("sess1"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(staffSession);
+    const req = makeRequest("/api/sessions/sess1/auto-assign", { method: "POST" });
+    const res = await autoAssignSessionRoute(req, makeParams("sess1"));
+    expect(res.status).toBe(403);
+  });
+
+  it("runs auto-assign and returns result", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    mockAutoAssignSession.mockResolvedValueOnce({ assigned: 2, empty: 0, conflicts: [] });
+    const req = makeRequest("/api/sessions/sess1/auto-assign", { method: "POST" });
+    const res = await autoAssignSessionRoute(req, makeParams("sess1"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.assigned).toBe(2);
+    expect(mockAutoAssignSession).toHaveBeenCalledWith("sess1");
   });
 });

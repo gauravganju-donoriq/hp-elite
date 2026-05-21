@@ -39,17 +39,17 @@ import type { StaffRole } from "@/lib/types";
 import { toast } from "sonner";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
-  "head-coach": "Head Coach",
-  "assistant-coach": "Assistant Coach",
-  volunteer: "Volunteer",
-  intern: "Intern",
+  lead: "Lead",
+  experience: "Experience",
+  junior: "Junior",
+  trial: "Trial",
 };
 
 const ROLE_VARIANTS: Record<StaffRole, "default" | "secondary" | "outline" | "destructive"> = {
-  "head-coach": "default",
-  "assistant-coach": "secondary",
-  volunteer: "outline",
-  intern: "outline",
+  lead: "default",
+  experience: "secondary",
+  junior: "outline",
+  trial: "outline",
 };
 
 export default function StaffManagementPage() {
@@ -60,7 +60,7 @@ export default function StaffManagementPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<StaffRole>("assistant-coach");
+  const [role, setRole] = useState<StaffRole>("experience");
   const [yearsExperience, setYearsExperience] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -80,7 +80,7 @@ export default function StaffManagementPage() {
     setLastName("");
     setEmail("");
     setPassword("");
-    setRole("assistant-coach");
+    setRole("experience");
     setYearsExperience(0);
     setDialogOpen(true);
   }

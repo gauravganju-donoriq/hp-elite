@@ -1,4 +1,4 @@
-export type StaffRole = "head-coach" | "assistant-coach" | "volunteer" | "intern";
+export type StaffRole = "lead" | "experience" | "junior" | "trial";
 
 export interface Staff {
   id: string;
@@ -86,3 +86,41 @@ export interface AutoAssignResult {
   empty: number;
   conflicts: AutoAssignConflict[];
 }
+
+export type ReportPeriodType = "weekly" | "monthly";
+export type ReportScope = "breakdown" | "single";
+
+export interface ReportBucket {
+  label: string;
+  start: string;
+  end: string;
+}
+
+export interface ReportRow {
+  staffId: string;
+  staffName: string;
+  role: StaffRole;
+  buckets: number[];
+  total: number;
+}
+
+export interface ReportPayload {
+  buckets: ReportBucket[];
+  rows: ReportRow[];
+  totalHours: number;
+}
+
+export interface Report {
+  id: string;
+  name: string;
+  scheduleId: string;
+  scheduleName: string;
+  periodType: ReportPeriodType;
+  scope: ReportScope;
+  periodStart: string;
+  periodEnd: string;
+  generatedAt: string;
+  payload: ReportPayload;
+}
+
+export type ReportSummary = Omit<Report, "payload">;

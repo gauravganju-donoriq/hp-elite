@@ -41,7 +41,7 @@ import { POST as bulkPost } from "@/app/api/availability/bulk/route";
 const adminSession = { user: { id: "u1", role: "admin" } };
 const staffSession = { user: { id: "u2", role: "user" } };
 
-const staffRecord = { id: "s2", userId: "u2", firstName: "Jane", lastName: "Doe", role: "volunteer", yearsExperience: 1 };
+const staffRecord = { id: "s2", userId: "u2", firstName: "Jane", lastName: "Doe", role: "junior", yearsExperience: 1 };
 
 function makeRequest(url: string, init?: RequestInit) {
   return new NextRequest(new URL(url, "http://localhost:3000"), init);

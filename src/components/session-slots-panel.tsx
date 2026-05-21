@@ -123,13 +123,20 @@ function SessionConfigPopover({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-80 p-0 max-h-[80vh] overflow-y-auto" align="start" side="bottom" collisionPadding={16} avoidCollisions>
+      <PopoverContent
+        className="w-80 p-0 max-h-[calc(100vh-8rem)] overflow-y-auto"
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        collisionPadding={{ top: 80, bottom: 16, left: 16, right: 16 }}
+        avoidCollisions
+      >
         <div className="p-3 space-y-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">
               Class Type
             </p>
-            <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
+            <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
               {(
                 Object.entries(SLOT_TYPE_CONFIG) as [
                   SlotType,
@@ -448,7 +455,7 @@ function ConflictResolutionDialog({
 
 export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
   const {
-    autoAssignAll,
+    autoAssignSession,
     getSlotsForSession,
     initializeSlotsForSession,
     sessionSlots,
@@ -533,13 +540,15 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     scrollRef.current?.scrollBy({ left: SCROLL_AMOUNT, behavior: "smooth" });
   }, []);
 
-  async function handleAutoAssign() {
+  async function handleAutoAssignSession(session: Session) {
     try {
-      const result = await autoAssignAll(schedule.id);
-      if (result.assigned > 0 && result.empty === 0) {
-        toast.success(`Auto-assigned ${result.assigned} staff. All slots filled!`);
+      const result = await autoAssignSession(session.id);
+      if (result.assigned > 0 && result.conflicts.length === 0) {
+        toast.success(
+          `Assigned ${result.assigned} staff to this session.`
+        );
       } else if (result.assigned > 0 && result.conflicts.length > 0) {
-        toast.success(`Auto-assigned ${result.assigned} staff.`);
+        toast.success(`Assigned ${result.assigned} staff.`);
         setConflicts(result.conflicts);
         setConflictDialogOpen(true);
       } else if (result.conflicts.length > 0) {
@@ -569,10 +578,6 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
             </div>
           )}
           <AddSessionDialog schedule={schedule} />
-          <Button size="sm" onClick={handleAutoAssign}>
-            <Sparkles className="h-4 w-4 mr-1" />
-            Auto Assign
-          </Button>
         </div>
       </div>
 
@@ -643,45 +648,56 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                       className="px-1.5 py-1.5 align-top border-r last:border-r-0"
                     >
                       <div className="space-y-1">
-                        <SessionConfigPopover
-                          session={session}
-                          schedule={schedule}
-                        >
-                          <button className="w-full flex items-center justify-between gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted group">
-                            <div className="flex items-center gap-1 min-w-0">
-                              {classConfig ? (
+                        <div className="flex items-center gap-0.5">
+                          <SessionConfigPopover
+                            session={session}
+                            schedule={schedule}
+                          >
+                            <button className="flex-1 min-w-0 flex items-center justify-between gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted group">
+                              <div className="flex items-center gap-1 min-w-0">
+                                {classConfig ? (
+                                  <span
+                                    className={cn(
+                                      "px-1 py-0.5 rounded text-[9px] font-medium truncate border",
+                                      classConfig.color
+                                    )}
+                                  >
+                                    {classConfig.label}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/60 italic">
+                                    Set class…
+                                  </span>
+                                )}
+                                <span className="text-muted-foreground">
+                                  {loc}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
                                 <span
                                   className={cn(
-                                    "px-1 py-0.5 rounded text-[9px] font-medium truncate border",
-                                    classConfig.color
+                                    "font-semibold",
+                                    isFull
+                                      ? "text-green-600"
+                                      : "text-red-600"
                                   )}
                                 >
-                                  {classConfig.label}
+                                  {assigned}/{session.requiredStaff}
                                 </span>
-                              ) : (
-                                <span className="text-muted-foreground/60 italic">
-                                  Set class…
-                                </span>
-                              )}
-                              <span className="text-muted-foreground">
-                                {loc}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span
-                                className={cn(
-                                  "font-semibold",
-                                  isFull
-                                    ? "text-green-600"
-                                    : "text-red-600"
-                                )}
-                              >
-                                {assigned}/{session.requiredStaff}
-                              </span>
-                              <Settings2 className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
+                                <Settings2 className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </button>
+                          </SessionConfigPopover>
+                          <button
+                            type="button"
+                            onClick={() => handleAutoAssignSession(session)}
+                            title="Auto assign staff to this class"
+                            aria-label="Auto assign staff to this class"
+                            className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                          >
+                            <Sparkles className="h-3 w-3" />
                           </button>
-                        </SessionConfigPopover>
+                        </div>
                         <div className="flex flex-col gap-0.5">
                           {slots.map((slot) => (
                             <SlotChip

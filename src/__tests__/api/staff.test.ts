@@ -39,7 +39,7 @@ const sampleStaff = {
   userId: "u1",
   firstName: "John",
   lastName: "Doe",
-  role: "head-coach",
+  role: "lead",
   yearsExperience: 5,
 };
 

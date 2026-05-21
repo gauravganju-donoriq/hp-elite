@@ -61,7 +61,7 @@ describe("POST /api/admin/create-user", () => {
     password: "password123",
     firstName: "John",
     lastName: "Doe",
-    staffRole: "head-coach",
+    staffRole: "lead",
   };
 
   it("returns 401 when unauthenticated", async () => {
@@ -103,7 +103,7 @@ describe("POST /api/admin/create-user", () => {
       userId: "new-user-id",
       firstName: "John",
       lastName: "Doe",
-      role: "head-coach",
+      role: "lead",
       yearsExperience: 0,
     });
     const req = makeRequest("/api/admin/create-user", validBody);
@@ -116,7 +116,7 @@ describe("POST /api/admin/create-user", () => {
         userId: "new-user-id",
         firstName: "John",
         lastName: "Doe",
-        role: "head-coach",
+        role: "lead",
       })
     );
   });
@@ -146,7 +146,7 @@ describe("POST /api/admin/link-account", () => {
     userId: undefined,
     firstName: "Jane",
     lastName: "Doe",
-    role: "volunteer",
+    role: "junior",
     yearsExperience: 1,
   };
 

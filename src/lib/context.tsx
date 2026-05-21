@@ -55,7 +55,7 @@ interface SchedulingContextType {
   assignStaffToSlot: (slotId: string, staffId: string) => void;
   unassignSlot: (slotId: string) => void;
   getSlotsForSession: (sessionId: string) => SessionSlot[];
-  autoAssignAll: (scheduleId: string) => Promise<AutoAssignResult>;
+  autoAssignSession: (sessionId: string) => Promise<AutoAssignResult>;
 }
 
 const SchedulingContext = createContext<SchedulingContextType | null>(null);
@@ -369,10 +369,10 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     [sessionSlots]
   );
 
-  const autoAssignAll = useCallback(
-    async (scheduleId: string): Promise<AutoAssignResult> => {
+  const autoAssignSession = useCallback(
+    async (sessionId: string): Promise<AutoAssignResult> => {
       const result = await apiFetch<AutoAssignResult>(
-        `/api/schedules/${scheduleId}/auto-assign`,
+        `/api/sessions/${sessionId}/auto-assign`,
         { method: "POST" }
       );
       const slotsData = await apiFetch<SessionSlot[]>("/api/slots");
@@ -409,7 +409,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         assignStaffToSlot,
         unassignSlot,
         getSlotsForSession,
-        autoAssignAll,
+        autoAssignSession,
       }}
     >
       {children}

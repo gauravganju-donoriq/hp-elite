@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, unauthorized, forbidden, isAdmin } from "@/lib/api-auth";
-import { autoAssignAll } from "@/lib/queries";
+import { autoAssignSession } from "@/lib/queries";
 
 export async function POST(
   _request: NextRequest,
@@ -11,6 +11,6 @@ export async function POST(
   if (!isAdmin(session)) return forbidden();
 
   const { id } = await params;
-  const result = await autoAssignAll(id);
+  const result = await autoAssignSession(id);
   return NextResponse.json(result);
 }
