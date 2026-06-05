@@ -8,6 +8,7 @@ import { SlotAssignmentPopover } from "@/components/slot-assignment-popover";
 import { getPaletteEntry } from "@/lib/class-type-colors";
 import { dayNameLong, formatDateDisplay } from "@/lib/dates";
 import { parseTimeToMinutes } from "@/lib/time";
+import { buildSessionGrid } from "@/lib/session-grid";
 import {
   Popover,
   PopoverContent,
@@ -606,13 +607,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     return [...set].sort();
   }, [sessions]);
 
-  const sessionGrid = useMemo(() => {
-    const map = new Map<string, Session>();
-    for (const s of sessions) {
-      map.set(`${s.date}|${s.startTime}–${s.endTime}`, s);
-    }
-    return map;
-  }, [sessions]);
+  const sessionGrid = useMemo(() => buildSessionGrid(sessions), [sessions]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const SCROLL_AMOUNT = 450;
@@ -717,8 +712,8 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                   </div>
                 </td>
                 {dates.map((date) => {
-                  const session = sessionGrid.get(`${date}|${tc}`);
-                  if (!session) {
+                  const cellSessions = sessionGrid.get(`${date}|${tc}`) || [];
+                  if (cellSessions.length === 0) {
                     return (
                       <td
                         key={date}
@@ -727,90 +722,102 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                     );
                   }
 
-                  const slots = slotsBySession.get(session.id) || [];
-                  const assigned = slots.filter(
-                    (s) => s.assignedStaffId
-                  ).length;
-                  const isFull = assigned >= session.requiredStaff;
-                  const loc =
-                    session.location === "Field House"
-                      ? "FH"
-                      : session.location === "K Sport"
-                        ? "KS"
-                        : session.location;
-                  const classType = session.classType
-                    ? classTypes.find((c) => c.id === session.classType)
-                    : null;
-                  const classConfig = classType
-                    ? {
-                        label: classType.label,
-                        color: getPaletteEntry(classType.colorKey).color,
-                      }
-                    : null;
-
                   return (
                     <td
                       key={date}
                       className="px-1.5 py-1.5 align-top border-r last:border-r-0"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-0.5">
-                          <SessionConfigPopover
-                            session={session}
-                            schedule={schedule}
-                          >
-                            <button className="flex-1 min-w-0 flex items-center justify-between gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted group">
-                              <div className="flex items-center gap-1 min-w-0">
-                                {classConfig ? (
-                                  <span
-                                    className={cn(
-                                      "px-1 py-0.5 rounded text-[9px] font-medium truncate border",
-                                      classConfig.color
-                                    )}
-                                  >
-                                    {classConfig.label}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground/60 italic">
-                                    Set class…
-                                  </span>
-                                )}
-                                <span className="text-muted-foreground">
-                                  {loc}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <span
-                                  className={cn(
-                                    "font-semibold",
-                                    isFull
-                                      ? "text-green-600"
-                                      : "text-red-600"
-                                  )}
+                      <div className="space-y-2">
+                        {cellSessions.map((session, sIdx) => {
+                          const slots = slotsBySession.get(session.id) || [];
+                          const assigned = slots.filter(
+                            (s) => s.assignedStaffId
+                          ).length;
+                          const isFull = assigned >= session.requiredStaff;
+                          const loc =
+                            session.location === "Field House"
+                              ? "FH"
+                              : session.location === "K Sport"
+                                ? "KS"
+                                : session.location;
+                          const classType = session.classType
+                            ? classTypes.find((c) => c.id === session.classType)
+                            : null;
+                          const classConfig = classType
+                            ? {
+                                label: classType.label,
+                                color: getPaletteEntry(classType.colorKey).color,
+                              }
+                            : null;
+
+                          return (
+                            <div
+                              key={session.id}
+                              className={cn(
+                                "space-y-1",
+                                sIdx > 0 && "border-t pt-2"
+                              )}
+                            >
+                              <div className="flex items-center gap-0.5">
+                                <SessionConfigPopover
+                                  session={session}
+                                  schedule={schedule}
                                 >
-                                  {assigned}/{session.requiredStaff}
-                                </span>
-                                <Settings2 className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  <button className="flex-1 min-w-0 flex items-center justify-between gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted group">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      {classConfig ? (
+                                        <span
+                                          className={cn(
+                                            "px-1 py-0.5 rounded text-[9px] font-medium truncate border",
+                                            classConfig.color
+                                          )}
+                                        >
+                                          {classConfig.label}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground/60 italic">
+                                          Set class…
+                                        </span>
+                                      )}
+                                      <span className="text-muted-foreground">
+                                        {loc}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span
+                                        className={cn(
+                                          "font-semibold",
+                                          isFull
+                                            ? "text-green-600"
+                                            : "text-red-600"
+                                        )}
+                                      >
+                                        {assigned}/{session.requiredStaff}
+                                      </span>
+                                      <Settings2 className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  </button>
+                                </SessionConfigPopover>
+                                <AutoAssignPopover
+                                  isLoading={autoAssigningSessionIds.has(session.id)}
+                                  onSelect={(strategy) =>
+                                    handleAutoAssignSession(session, strategy)
+                                  }
+                                />
                               </div>
-                            </button>
-                          </SessionConfigPopover>
-                          <AutoAssignPopover
-                            isLoading={autoAssigningSessionIds.has(session.id)}
-                            onSelect={(strategy) =>
-                              handleAutoAssignSession(session, strategy)
-                            }
-                          />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          {slots.map((slot) => (
-                            <SlotChip
-                              key={slot.id}
-                              slot={slot}
-                              session={session}
-                              allSlots={slots}
-                            />
-                          ))}
-                        </div>
+                              <div className="flex flex-col gap-0.5">
+                                {slots.map((slot) => (
+                                  <SlotChip
+                                    key={slot.id}
+                                    slot={slot}
+                                    session={session}
+                                    allSlots={slots}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </td>
                   );

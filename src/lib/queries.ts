@@ -461,6 +461,49 @@ export async function initializeSlotsForSession(
   return setSlotCount(sessionId, count);
 }
 
+// Returns true if the staff member is already assigned to a different session
+// on the same date whose time window overlaps the given session. Used to guard
+// manual assignment against double-booking (auto-assign already prevents this).
+export async function isStaffDoubleBooked(
+  sessionId: string,
+  staffId: string
+): Promise<boolean> {
+  const session = await getSessionById(sessionId);
+  if (!session) return false;
+
+  const { rows: sameDayRows } = await pool.query(
+    `SELECT id, start_time, end_time
+     FROM training_session
+     WHERE date = $1 AND id <> $2`,
+    [session.date, sessionId]
+  );
+
+  const overlappingSessionIds: string[] = [];
+  for (const r of sameDayRows) {
+    if (
+      timeRangesOverlap(
+        session.startTime,
+        session.endTime,
+        r.start_time as string,
+        r.end_time as string
+      )
+    ) {
+      overlappingSessionIds.push(r.id as string);
+    }
+  }
+
+  if (overlappingSessionIds.length === 0) return false;
+
+  const { rows } = await pool.query(
+    `SELECT 1
+     FROM session_slot
+     WHERE session_id = ANY($1::text[]) AND assigned_staff_id = $2
+     LIMIT 1`,
+    [overlappingSessionIds, staffId]
+  );
+  return rows.length > 0;
+}
+
 export async function assignStaffToSlot(slotId: string, staffId: string): Promise<boolean> {
   const { rowCount } = await pool.query(
     `UPDATE session_slot SET assigned_staff_id = $1 WHERE id = $2`,

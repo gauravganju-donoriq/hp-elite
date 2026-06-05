@@ -39,13 +39,12 @@ import type { AvailabilityStatus, Session } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  addDays,
   formatDateDisplay,
-  formatISODate,
   monthYear,
   parseISODate,
   todayISO,
 } from "@/lib/dates";
+import { buildCalendarWeeks } from "@/lib/availability-calendar";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -103,42 +102,6 @@ const STATUS_CONFIG: Record<
     badgeClass: "bg-gray-200 text-gray-600 border-gray-400",
   },
 };
-
-type WeekRow = { date: string; sessions: Session[] }[];
-
-function buildCalendarWeeks(sessions: Session[]): WeekRow[] {
-  if (sessions.length === 0) return [];
-
-  const byDate = new Map<string, Session[]>();
-  for (const s of sessions) {
-    const existing = byDate.get(s.date);
-    if (existing) existing.push(s);
-    else byDate.set(s.date, [s]);
-  }
-  for (const daySessions of byDate.values()) {
-    daySessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }
-
-  const sorted = sessions.map((s) => s.date).sort();
-  const first = parseISODate(sorted[0]);
-  const last = parseISODate(sorted[sorted.length - 1]);
-
-  const start = addDays(first, -first.getUTCDay());
-  const end = addDays(last, 6 - last.getUTCDay());
-
-  const weeks: WeekRow[] = [];
-  let cur = start;
-  while (cur.getTime() <= end.getTime()) {
-    const week: WeekRow = [];
-    for (let d = 0; d < 7; d++) {
-      const ds = formatISODate(cur);
-      week.push({ date: ds, sessions: byDate.get(ds) ?? [] });
-      cur = addDays(cur, 1);
-    }
-    weeks.push(week);
-  }
-  return weeks;
-}
 
 function formatFullDate(dateStr: string) {
   return formatDateDisplay(dateStr).fullLong;

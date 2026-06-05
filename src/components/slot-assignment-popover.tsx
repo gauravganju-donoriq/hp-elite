@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { timeRangesOverlap } from "@/lib/time";
 import { Check, User, X } from "lucide-react";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
@@ -54,6 +55,7 @@ export function SlotAssignmentPopover({
 }: SlotAssignmentPopoverProps) {
   const {
     staff,
+    schedules,
     availability,
     sessionSlots,
     assignStaffToSlot,
@@ -64,6 +66,32 @@ export function SlotAssignmentPopover({
   const alreadyAssignedInSession = new Set(
     allSlots
       .filter((s) => s.assignedStaffId && s.id !== slot.id)
+      .map((s) => s.assignedStaffId!)
+  );
+
+  // Staff already assigned to a different session on the same date whose time
+  // window overlaps this one can't be double-booked (mirrors auto-assign).
+  const overlappingSessionIds = new Set(
+    schedules
+      .flatMap((s) => s.sessions)
+      .filter(
+        (s) =>
+          s.id !== session.id &&
+          s.date === session.date &&
+          timeRangesOverlap(
+            session.startTime,
+            session.endTime,
+            s.startTime,
+            s.endTime
+          )
+      )
+      .map((s) => s.id)
+  );
+  const doubleBookedStaffIds = new Set(
+    sessionSlots
+      .filter(
+        (s) => s.assignedStaffId && overlappingSessionIds.has(s.sessionId)
+      )
       .map((s) => s.assignedStaffId!)
   );
 
@@ -79,6 +107,7 @@ export function SlotAssignmentPopover({
 
   const eligibleStaff = staff
     .filter((m) => !alreadyAssignedInSession.has(m.id))
+    .filter((m) => !doubleBookedStaffIds.has(m.id))
     .map((member) => {
       const avail = availability.find(
         (a) => a.staffId === member.id && a.sessionId === session.id

@@ -6,6 +6,7 @@ import {
   initializeSlotsForSession,
   assignStaffToSlot,
   unassignSlot,
+  isStaffDoubleBooked,
 } from "@/lib/queries";
 
 export async function GET(
@@ -73,6 +74,15 @@ export async function PATCH(
   if (action === "unassign") {
     await unassignSlot(slotId);
   } else if (staffId && typeof staffId === "string") {
+    if (await isStaffDoubleBooked(sessionId, staffId)) {
+      return NextResponse.json(
+        {
+          error:
+            "This staff member is already assigned to an overlapping session at the same time.",
+        },
+        { status: 409 }
+      );
+    }
     await assignStaffToSlot(slotId, staffId);
   } else {
     return NextResponse.json({ error: "staffId or action=unassign required" }, { status: 400 });

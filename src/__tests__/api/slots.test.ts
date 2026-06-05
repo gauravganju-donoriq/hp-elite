@@ -8,6 +8,7 @@ const {
   mockInitializeSlotsForSession,
   mockAssignStaffToSlot,
   mockUnassignSlot,
+  mockIsStaffDoubleBooked,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetSlotsForSession: vi.fn(),
@@ -15,6 +16,7 @@ const {
   mockInitializeSlotsForSession: vi.fn(),
   mockAssignStaffToSlot: vi.fn(),
   mockUnassignSlot: vi.fn(),
+  mockIsStaffDoubleBooked: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -30,6 +32,7 @@ vi.mock("@/lib/queries", () => ({
   initializeSlotsForSession: mockInitializeSlotsForSession,
   assignStaffToSlot: mockAssignStaffToSlot,
   unassignSlot: mockUnassignSlot,
+  isStaffDoubleBooked: mockIsStaffDoubleBooked,
 }));
 
 import { GET as getSessionSlots, POST as initSlots, PATCH as patchSlot } from "@/app/api/sessions/[id]/slots/route";
