@@ -1,4 +1,5 @@
 import pool from "./db";
+import { timeRangesOverlap } from "./time";
 import type {
   Staff,
   Schedule,
@@ -9,6 +10,8 @@ import type {
   StaffRole,
   AutoAssignConflict,
   AutoAssignResult,
+  AutoAssignStrategy,
+  ClassType,
   Report,
   ReportPayload,
   ReportPeriodType,
@@ -414,22 +417,29 @@ export async function getAllSlots(): Promise<SessionSlot[]> {
   return rows.map(mapSlotRow);
 }
 
-export async function initializeSlotsForSession(
+export async function setSlotCount(
   sessionId: string,
   count: number
 ): Promise<SessionSlot[]> {
-  const existing = await getSlotsForSession(sessionId);
-
-  if (existing.length >= count) {
-    return existing.slice(0, count);
-  }
-
+  if (count < 0) count = 0;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    for (let i = existing.length; i < count; i++) {
+    await client.query(
+      `DELETE FROM session_slot WHERE session_id = $1 AND slot_index >= $2`,
+      [sessionId, count]
+    );
+    const { rows: existingRows } = await client.query(
+      `SELECT slot_index FROM session_slot WHERE session_id = $1`,
+      [sessionId]
+    );
+    const haveIdx = new Set<number>(existingRows.map((r) => r.slot_index as number));
+    for (let i = 0; i < count; i++) {
+      if (haveIdx.has(i)) continue;
       await client.query(
-        `INSERT INTO session_slot (id, session_id, slot_index) VALUES ($1, $2, $3)`,
+        `INSERT INTO session_slot (id, session_id, slot_index)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (session_id, slot_index) DO NOTHING`,
         [`slot-${sessionId}-${i}`, sessionId, i]
       );
     }
@@ -440,8 +450,15 @@ export async function initializeSlotsForSession(
   } finally {
     client.release();
   }
-
   return getSlotsForSession(sessionId);
+}
+
+// Backwards-compatible name; behaviour is now a full reconcile (grow or shrink).
+export async function initializeSlotsForSession(
+  sessionId: string,
+  count: number
+): Promise<SessionSlot[]> {
+  return setSlotCount(sessionId, count);
 }
 
 export async function assignStaffToSlot(slotId: string, staffId: string): Promise<boolean> {
@@ -467,25 +484,94 @@ const ROLE_PRIORITY: Record<StaffRole, number> = {
   trial: 3,
 };
 
-export async function autoAssignSession(
-  sessionId: string
-): Promise<AutoAssignResult> {
-  const session = await getSessionById(sessionId);
-  if (!session) return { assigned: 0, empty: 0, conflicts: [] };
+type StrategyBucket = {
+  roles: StaffRole[];
+  max?: number;
+  preferSeniorFirst: boolean;
+};
 
-  const allStaff = await getAllStaff();
-  const allAvailability = await getAllAvailability();
-  const allSlots = await getAllSlots();
+const STRATEGY_PLAN: Record<AutoAssignStrategy, StrategyBucket[]> = {
+  cheap: [
+    { roles: ["trial"], preferSeniorFirst: false },
+    { roles: ["junior"], preferSeniorFirst: false },
+    { roles: ["experience"], preferSeniorFirst: false },
+    { roles: ["lead"], preferSeniorFirst: false },
+  ],
+  balanced: [
+    { roles: ["lead"], max: 1, preferSeniorFirst: true },
+    { roles: ["experience"], max: 1, preferSeniorFirst: true },
+    { roles: ["junior"], preferSeniorFirst: true },
+    { roles: ["trial"], preferSeniorFirst: true },
+    { roles: ["experience"], preferSeniorFirst: true },
+    { roles: ["lead"], preferSeniorFirst: true },
+  ],
+  expensive: [
+    { roles: ["lead"], max: 1, preferSeniorFirst: true },
+    { roles: ["experience"], max: 2, preferSeniorFirst: true },
+    { roles: ["trial"], preferSeniorFirst: false },
+    { roles: ["junior"], preferSeniorFirst: true },
+    { roles: ["experience"], preferSeniorFirst: true },
+    { roles: ["lead"], preferSeniorFirst: true },
+  ],
+};
 
-  const assignmentCounts = new Map<string, number>();
-  for (const slot of allSlots) {
-    if (slot.assignedStaffId) {
-      assignmentCounts.set(slot.assignedStaffId, (assignmentCounts.get(slot.assignedStaffId) || 0) + 1);
+function buildOrderedCandidates(
+  availableStaff: Staff[],
+  strategy: AutoAssignStrategy,
+  existingRoleCounts: Record<StaffRole, number>,
+  assignmentCounts: Map<string, number>
+): Staff[] {
+  const buckets = STRATEGY_PLAN[strategy];
+  const remainingByRole: Record<StaffRole, number> = {
+    lead: existingRoleCounts.lead,
+    experience: existingRoleCounts.experience,
+    junior: existingRoleCounts.junior,
+    trial: existingRoleCounts.trial,
+  };
+  const used = new Set<string>();
+  const ordered: Staff[] = [];
+
+  for (const bucket of buckets) {
+    const pool = availableStaff
+      .filter((m) => !used.has(m.id) && bucket.roles.includes(m.role))
+      .sort((a, b) => {
+        const expDiff = bucket.preferSeniorFirst
+          ? (b.yearsExperience ?? 0) - (a.yearsExperience ?? 0)
+          : (a.yearsExperience ?? 0) - (b.yearsExperience ?? 0);
+        if (expDiff !== 0) return expDiff;
+        const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
+        if (roleDiff !== 0) return roleDiff;
+        return (
+          (assignmentCounts.get(a.id) || 0) -
+          (assignmentCounts.get(b.id) || 0)
+        );
+      });
+
+    let remainingBudget = bucket.max ?? Infinity;
+    if (bucket.max !== undefined) {
+      for (const role of bucket.roles) {
+        const consume = Math.min(remainingByRole[role], remainingBudget);
+        remainingBudget -= consume;
+        remainingByRole[role] -= consume;
+        if (remainingBudget <= 0) break;
+      }
+    }
+
+    for (const member of pool) {
+      if (remainingBudget <= 0) break;
+      ordered.push(member);
+      used.add(member.id);
+      remainingBudget--;
     }
   }
 
-  const sessionSlots = allSlots.filter((s) => s.sessionId === session.id);
+  return ordered;
+}
 
+export async function autoAssignSession(
+  sessionId: string,
+  strategy: AutoAssignStrategy = "balanced"
+): Promise<AutoAssignResult> {
   let totalAssigned = 0;
   let totalEmpty = 0;
   const conflicts: AutoAssignConflict[] = [];
@@ -494,6 +580,30 @@ export async function autoAssignSession(
   try {
     await client.query("BEGIN");
 
+    // Lock the session row first; anything reading or modifying it via
+    // this same code path will wait.
+    const { rows: sessionRows } = await client.query(
+      `SELECT id, schedule_id, date, day_of_week, start_time, end_time, location,
+              required_staff, class_type
+       FROM training_session WHERE id = $1 FOR UPDATE`,
+      [sessionId]
+    );
+    if (sessionRows.length === 0) {
+      await client.query("COMMIT");
+      return { assigned: 0, empty: 0, conflicts: [] };
+    }
+    const session = mapSessionRow(sessionRows[0]);
+
+    // Lock this session's slots so a concurrent manual assign can't race us.
+    const { rows: slotRows } = await client.query(
+      `SELECT id, session_id, slot_index, assigned_staff_id
+       FROM session_slot WHERE session_id = $1
+       ORDER BY slot_index FOR UPDATE`,
+      [session.id]
+    );
+    const sessionSlots: SessionSlot[] = slotRows.map(mapSlotRow);
+
+    // Reconcile slot count: grow only - shrinking here would be surprising.
     if (sessionSlots.length < session.requiredStaff) {
       for (let i = sessionSlots.length; i < session.requiredStaff; i++) {
         const newSlot: SessionSlot = {
@@ -502,11 +612,71 @@ export async function autoAssignSession(
           slotIndex: i,
         };
         await client.query(
-          `INSERT INTO session_slot (id, session_id, slot_index) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+          `INSERT INTO session_slot (id, session_id, slot_index)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (session_id, slot_index) DO NOTHING`,
           [newSlot.id, newSlot.sessionId, newSlot.slotIndex]
         );
         sessionSlots.push(newSlot);
       }
+    }
+
+    // Pull all the supporting data we need inside the transaction.
+    const { rows: staffRows } = await client.query(
+      `SELECT id, user_id, first_name, last_name, role, years_experience FROM staff`
+    );
+    const allStaff: Staff[] = staffRows.map(mapStaffRow);
+
+    const { rows: availRows } = await client.query(
+      `SELECT staff_id, session_id, status, custom_start_time, custom_end_time, notes
+       FROM availability WHERE session_id = $1`,
+      [session.id]
+    );
+    const sessionAvailability: Availability[] = availRows.map(mapAvailRow);
+
+    // Sessions on the same date that could time-overlap with this one.
+    const { rows: overlapSessionRows } = await client.query(
+      `SELECT id, start_time, end_time
+       FROM training_session
+       WHERE date = $1 AND id <> $2`,
+      [session.date, session.id]
+    );
+    const overlappingSessionIds = new Set<string>();
+    for (const r of overlapSessionRows) {
+      if (
+        timeRangesOverlap(
+          session.startTime,
+          session.endTime,
+          r.start_time as string,
+          r.end_time as string
+        )
+      ) {
+        overlappingSessionIds.add(r.id as string);
+      }
+    }
+
+    // Staff who are already assigned to any overlapping session are ineligible.
+    const bannedStaffIds = new Set<string>();
+    if (overlappingSessionIds.size > 0) {
+      const { rows: conflictRows } = await client.query(
+        `SELECT DISTINCT assigned_staff_id
+         FROM session_slot
+         WHERE session_id = ANY($1::text[]) AND assigned_staff_id IS NOT NULL`,
+        [Array.from(overlappingSessionIds)]
+      );
+      for (const r of conflictRows) {
+        if (r.assigned_staff_id) bannedStaffIds.add(r.assigned_staff_id as string);
+      }
+    }
+
+    // Global assignment counts for fairness sorting.
+    const { rows: allSlotRows } = await client.query(
+      `SELECT assigned_staff_id FROM session_slot WHERE assigned_staff_id IS NOT NULL`
+    );
+    const assignmentCounts = new Map<string, number>();
+    for (const r of allSlotRows) {
+      const sid = r.assigned_staff_id as string;
+      assignmentCounts.set(sid, (assignmentCounts.get(sid) || 0) + 1);
     }
 
     const alreadyAssigned = new Set<string>();
@@ -514,9 +684,6 @@ export async function autoAssignSession(
       if (slot.assignedStaffId) alreadyAssigned.add(slot.assignedStaffId);
     }
 
-    const sessionAvailability = allAvailability.filter(
-      (a) => a.sessionId === session.id
-    );
     const availableCount = sessionAvailability.filter(
       (a) => a.status === "available"
     ).length;
@@ -524,34 +691,49 @@ export async function autoAssignSession(
       (a) => a.status === "maybe"
     ).length;
 
-    const availableStaff = allStaff
-      .filter((member) => {
-        if (alreadyAssigned.has(member.id)) return false;
-        const avail = sessionAvailability.find(
-          (a) => a.staffId === member.id
-        );
-        return avail?.status === "available";
-      })
-      .sort((a, b) => {
-        const expDiff = (b.yearsExperience ?? 0) - (a.yearsExperience ?? 0);
-        if (expDiff !== 0) return expDiff;
-        const roleDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
-        if (roleDiff !== 0) return roleDiff;
-        return (assignmentCounts.get(a.id) || 0) - (assignmentCounts.get(b.id) || 0);
-      });
+    let overlapBlockedCount = 0;
+    const availableStaff = allStaff.filter((member) => {
+      if (alreadyAssigned.has(member.id)) return false;
+      const avail = sessionAvailability.find((a) => a.staffId === member.id);
+      if (avail?.status !== "available") return false;
+      if (bannedStaffIds.has(member.id)) {
+        overlapBlockedCount++;
+        return false;
+      }
+      return true;
+    });
+
+    const existingRoleCounts: Record<StaffRole, number> = {
+      lead: 0,
+      experience: 0,
+      junior: 0,
+      trial: 0,
+    };
+    for (const slot of sessionSlots) {
+      if (!slot.assignedStaffId) continue;
+      const member = allStaff.find((m) => m.id === slot.assignedStaffId);
+      if (member) existingRoleCounts[member.role]++;
+    }
+
+    const orderedCandidates = buildOrderedCandidates(
+      availableStaff,
+      strategy,
+      existingRoleCounts,
+      assignmentCounts
+    );
 
     let staffIdx = 0;
     let sessionUnfilled = 0;
     for (const slot of sessionSlots) {
       if (slot.assignedStaffId) continue;
-      if (staffIdx < availableStaff.length) {
+      if (staffIdx < orderedCandidates.length) {
         await client.query(
           `UPDATE session_slot SET assigned_staff_id = $1 WHERE id = $2`,
-          [availableStaff[staffIdx].id, slot.id]
+          [orderedCandidates[staffIdx].id, slot.id]
         );
         assignmentCounts.set(
-          availableStaff[staffIdx].id,
-          (assignmentCounts.get(availableStaff[staffIdx].id) || 0) + 1
+          orderedCandidates[staffIdx].id,
+          (assignmentCounts.get(orderedCandidates[staffIdx].id) || 0) + 1
         );
         totalAssigned++;
         staffIdx++;
@@ -566,6 +748,9 @@ export async function autoAssignSession(
       let reason: string;
       if (availableCount === 0 && maybeCount === 0) {
         reason = `No staff have responded with availability for this session. Ask staff to update their availability.`;
+      } else if (overlapBlockedCount > 0 && availableCount - overlapBlockedCount < session.requiredStaff) {
+        const others = availableCount - overlapBlockedCount;
+        reason = `${overlapBlockedCount} otherwise-available staff are already assigned to a time-overlapping session. Only ${others} of ${session.requiredStaff} eligible. Reassign someone from the overlapping session or ask more staff to confirm.`;
       } else if (availableCount < session.requiredStaff && maybeCount > 0) {
         reason = `Only ${availableCount} of ${session.requiredStaff} staff marked available (${maybeCount} marked maybe). Manually assign staff who marked 'maybe', or ask more staff to confirm availability.`;
       } else {
@@ -703,4 +888,78 @@ function formatDate(val: unknown): string {
     return val.toISOString().split("T")[0];
   }
   return String(val).split("T")[0];
+}
+
+// --------------- Class Types ---------------
+
+function mapClassTypeRow(row: Record<string, unknown>): ClassType {
+  return {
+    id: row.id as string,
+    label: row.label as string,
+    colorKey: row.color_key as string,
+    sortOrder: (row.sort_order as number) ?? 0,
+  };
+}
+
+export async function getAllClassTypes(): Promise<ClassType[]> {
+  const { rows } = await pool.query(
+    `SELECT id, label, color_key, sort_order FROM class_type ORDER BY sort_order, label`
+  );
+  return rows.map(mapClassTypeRow);
+}
+
+export async function createClassType(input: ClassType): Promise<ClassType> {
+  const { rows } = await pool.query(
+    `INSERT INTO class_type (id, label, color_key, sort_order)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, label, color_key, sort_order`,
+    [input.id, input.label, input.colorKey, input.sortOrder ?? 0]
+  );
+  return mapClassTypeRow(rows[0]);
+}
+
+export async function updateClassType(
+  id: string,
+  updates: Partial<Pick<ClassType, "label" | "colorKey" | "sortOrder">>
+): Promise<ClassType | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (updates.label !== undefined) {
+    setClauses.push(`label = $${idx++}`);
+    values.push(updates.label);
+  }
+  if (updates.colorKey !== undefined) {
+    setClauses.push(`color_key = $${idx++}`);
+    values.push(updates.colorKey);
+  }
+  if (updates.sortOrder !== undefined) {
+    setClauses.push(`sort_order = $${idx++}`);
+    values.push(updates.sortOrder);
+  }
+
+  if (setClauses.length === 0) {
+    const existing = await pool.query(
+      `SELECT id, label, color_key, sort_order FROM class_type WHERE id = $1`,
+      [id]
+    );
+    return existing.rows[0] ? mapClassTypeRow(existing.rows[0]) : null;
+  }
+
+  values.push(id);
+  const { rows } = await pool.query(
+    `UPDATE class_type SET ${setClauses.join(", ")} WHERE id = $${idx}
+     RETURNING id, label, color_key, sort_order`,
+    values
+  );
+  return rows[0] ? mapClassTypeRow(rows[0]) : null;
+}
+
+export async function deleteClassType(id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM class_type WHERE id = $1`,
+    [id]
+  );
+  return (rowCount ?? 0) > 0;
 }

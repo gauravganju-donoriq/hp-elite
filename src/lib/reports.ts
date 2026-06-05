@@ -9,6 +9,10 @@ import type {
   SessionSlot,
   Staff,
 } from "./types";
+import {
+  parseTimeToMinutes as sharedParseTimeToMinutes,
+  hoursBetween as sharedHoursBetween,
+} from "./time";
 
 const MONTH_LABELS = [
   "January",
@@ -40,37 +44,8 @@ const MONTH_SHORT = [
   "Dec",
 ];
 
-/** Minutes since midnight. Supports "5:00 PM", "17:00", and "17:30:00". */
-export function parseTimeToMinutes(time: string): number {
-  const t = time.trim();
-  const twelve = t.match(
-    /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i
-  );
-  if (twelve) {
-    let h = parseInt(twelve[1], 10);
-    const m = parseInt(twelve[2], 10);
-    const ap = twelve[4].toUpperCase();
-    if (ap === "PM" && h !== 12) h += 12;
-    if (ap === "AM" && h === 12) h = 0;
-    return h * 60 + m;
-  }
-  const twentyFour = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (twentyFour) {
-    const h = parseInt(twentyFour[1], 10);
-    const m = parseInt(twentyFour[2], 10);
-    return h * 60 + m;
-  }
-  return NaN;
-}
-
-export function hoursBetween(startTime: string, endTime: string): number {
-  const startMin = parseTimeToMinutes(startTime);
-  const endMin = parseTimeToMinutes(endTime);
-  if (Number.isNaN(startMin) || Number.isNaN(endMin)) return 0;
-  let diff = endMin - startMin;
-  if (diff < 0) diff += 24 * 60;
-  return diff / 60;
-}
+export const parseTimeToMinutes = sharedParseTimeToMinutes;
+export const hoursBetween = sharedHoursBetween;
 
 function parseISODate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);

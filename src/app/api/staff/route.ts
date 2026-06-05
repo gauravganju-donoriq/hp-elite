@@ -7,7 +7,19 @@ export async function GET() {
   if (!session) return unauthorized();
 
   const staff = await getAllStaff();
-  return NextResponse.json(staff);
+  if (isAdmin(session)) {
+    return NextResponse.json(staff);
+  }
+  // Non-admins get a slim roster: enough to render names of assigned staff
+  // in shared views, but no contact/auth/sensitive data.
+  const slim = staff.map((s) => ({
+    id: s.id,
+    firstName: s.firstName,
+    lastName: "",
+    role: s.role,
+    yearsExperience: 0,
+  }));
+  return NextResponse.json(slim);
 }
 
 export async function POST(request: NextRequest) {

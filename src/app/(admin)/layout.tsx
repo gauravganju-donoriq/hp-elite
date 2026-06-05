@@ -1,10 +1,16 @@
+import { redirect } from "next/navigation";
 import { AdminNavbar } from "@/components/admin-navbar";
+import { getSession, isAdmin } from "@/lib/api-auth";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (!isAdmin(session)) redirect("/dashboard");
+
   return (
     <>
       <AdminNavbar />

@@ -436,6 +436,6 @@ describe("POST /api/sessions/[id]/auto-assign", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.assigned).toBe(2);
-    expect(mockAutoAssignSession).toHaveBeenCalledWith("sess1");
+    expect(mockAutoAssignSession).toHaveBeenCalledWith("sess1", "balanced");
   });
 });

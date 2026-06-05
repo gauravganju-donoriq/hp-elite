@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useScheduling } from "@/lib/context";
 import type { Session } from "@/lib/types";
+import { addDays, dayOfWeekUTC, formatISODate, parseISODate } from "@/lib/dates";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 
@@ -67,17 +68,20 @@ export default function CreateSchedulePage() {
   function generateSessions(): Session[] {
     if (!startDate || !endDate) return [];
     const sessions: Session[] = [];
-    const start = new Date(startDate + "T12:00:00");
-    const end = new Date(endDate + "T12:00:00");
+    const start = parseISODate(startDate);
+    const end = parseISODate(endDate);
+    if (end.getTime() < start.getTime()) return [];
     const scheduleId = `sched-${Date.now()}`;
     let counter = 0;
 
-    const current = new Date(start);
-    while (current <= end) {
-      const dayOfWeek = current.getDay();
-      const matchingPatterns = patterns.filter((p) => p.dayOfWeek === dayOfWeek);
+    let current = start;
+    while (current.getTime() <= end.getTime()) {
+      const dateStr = formatISODate(current);
+      const dayOfWeek = dayOfWeekUTC(dateStr);
+      const matchingPatterns = patterns.filter(
+        (p) => p.dayOfWeek === dayOfWeek
+      );
       for (const pattern of matchingPatterns) {
-        const dateStr = current.toISOString().split("T")[0];
         sessions.push({
           id: `sess-${scheduleId}-${counter++}`,
           scheduleId,
@@ -89,7 +93,7 @@ export default function CreateSchedulePage() {
           requiredStaff: pattern.requiredStaff,
         });
       }
-      current.setDate(current.getDate() + 1);
+      current = addDays(current, 1);
     }
     return sessions;
   }

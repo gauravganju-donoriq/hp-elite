@@ -35,14 +35,92 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDateDisplay, parseISODate } from "@/lib/dates";
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const d = parseISODate(dateStr);
+  return `${formatDateDisplay(dateStr).shortLong}, ${d.getUTCFullYear()}`;
+}
+
+function DeleteScheduleDialog({
+  schedule,
+  onConfirm,
+}: {
+  schedule: Schedule;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+
+  function handleOpen(isOpen: boolean) {
+    setOpen(isOpen);
+    if (isOpen) setTyped("");
+  }
+
+  const canDelete = typed.trim() === schedule.name;
+
+  function handleConfirm() {
+    if (!canDelete) return;
+    setOpen(false);
+    onConfirm();
+  }
+
+  const sessionCount = schedule.sessions.length;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm">
+          <Trash2 className="h-4 w-4 mr-1" />
+          Delete Schedule
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            Delete this schedule?
+          </DialogTitle>
+          <DialogDescription>
+            This will permanently delete the schedule along with:
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+          <li>{sessionCount} session{sessionCount === 1 ? "" : "s"}</li>
+          <li>all availability responses for those sessions</li>
+          <li>all slot assignments</li>
+          <li>
+            <strong>all reports generated from this schedule</strong>
+          </li>
+        </ul>
+        <div className="space-y-2">
+          <Label htmlFor="delete-confirm" className="text-sm">
+            Type <span className="font-semibold">{schedule.name}</span> to
+            confirm.
+          </Label>
+          <Input
+            id="delete-confirm"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={schedule.name}
+            autoComplete="off"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={!canDelete}
+            onClick={handleConfirm}
+          >
+            Delete Schedule
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function EditScheduleDialog({ schedule }: { schedule: Schedule }) {
@@ -223,10 +301,7 @@ export default function ScheduleDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <EditScheduleDialog schedule={schedule} />
-          <Button variant="destructive" size="sm" onClick={handleDelete}>
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete Schedule
-          </Button>
+          <DeleteScheduleDialog schedule={schedule} onConfirm={handleDelete} />
         </div>
       </div>
 

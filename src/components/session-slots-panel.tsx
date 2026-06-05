@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useScheduling } from "@/lib/context";
-import type { Schedule, Session, SessionSlot, SlotType, AutoAssignConflict } from "@/lib/types";
+import type { Schedule, Session, SessionSlot, AutoAssignConflict, AutoAssignStrategy } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import {
-  SlotAssignmentPopover,
-  SLOT_TYPE_CONFIG,
-} from "@/components/slot-assignment-popover";
+import { SlotAssignmentPopover } from "@/components/slot-assignment-popover";
+import { getPaletteEntry } from "@/lib/class-type-colors";
+import { dayNameLong, formatDateDisplay } from "@/lib/dates";
+import { parseTimeToMinutes } from "@/lib/time";
 import {
   Popover,
   PopoverContent,
@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Loader2, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function SlotChip({
@@ -66,6 +66,94 @@ function SlotChip({
   );
 }
 
+function AutoAssignPopover({
+  onSelect,
+  isLoading,
+}: {
+  onSelect: (strategy: AutoAssignStrategy) => void | Promise<void>;
+  isLoading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  function handlePick(strategy: AutoAssignStrategy) {
+    setOpen(false);
+    void onSelect(strategy);
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        title="Auto-assigning…"
+        aria-label="Auto-assigning staff to this class"
+        role="status"
+        className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground"
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+      </div>
+    );
+  }
+
+  const options: {
+    strategy: AutoAssignStrategy;
+    title: string;
+    description: string;
+  }[] = [
+    {
+      strategy: "cheap",
+      title: "Cheap",
+      description: "Trials, then juniors",
+    },
+    {
+      strategy: "balanced",
+      title: "Balanced",
+      description: "1 lead, 1 experience, rest juniors",
+    },
+    {
+      strategy: "expensive",
+      title: "Expensive",
+      description: "1 lead, 2 experience, rest trials then juniors",
+    },
+  ];
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Auto assign staff to this class"
+          aria-label="Auto assign staff to this class"
+          className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <Sparkles className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 p-2">
+        <div className="px-2 py-1.5">
+          <p className="text-xs font-semibold">Auto-assign</p>
+          <p className="text-[10px] text-muted-foreground">
+            Choose how to fill empty slots.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
+          {options.map((opt) => (
+            <button
+              key={opt.strategy}
+              type="button"
+              onClick={() => handlePick(opt.strategy)}
+              className="w-full rounded px-2 py-1.5 text-left hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <div className="text-xs font-medium">{opt.title}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {opt.description}
+              </div>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SessionConfigPopover({
   session,
   schedule,
@@ -75,15 +163,24 @@ function SessionConfigPopover({
   schedule: Schedule;
   children: React.ReactNode;
 }) {
-  const { updateSession, removeSession, initializeSlotsForSession } = useScheduling();
+  const { updateSession, removeSession, initializeSlotsForSession, classTypes } =
+    useScheduling();
   const [open, setOpen] = useState(false);
   const [staffCount, setStaffCount] = useState(session.requiredStaff);
   const [startTime, setStartTime] = useState(session.startTime);
   const [endTime, setEndTime] = useState(session.endTime);
   const [location, setLocation] = useState(session.location);
 
-  function handleSelectType(type: SlotType) {
-    updateSession(schedule.id, session.id, { classType: type });
+  const sortedClassTypes = useMemo(
+    () =>
+      [...classTypes].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)
+      ),
+    [classTypes]
+  );
+
+  function handleSelectType(typeId: string) {
+    updateSession(schedule.id, session.id, { classType: typeId });
   }
 
   function handleStaffChange(delta: number) {
@@ -137,26 +234,29 @@ function SessionConfigPopover({
               Class Type
             </p>
             <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-              {(
-                Object.entries(SLOT_TYPE_CONFIG) as [
-                  SlotType,
-                  { label: string; color: string },
-                ][]
-              ).map(([type, config]) => (
-                <button
-                  key={type}
-                  onClick={() => handleSelectType(type)}
-                  className={cn(
-                    "text-left text-xs px-2 py-1.5 rounded border transition-colors",
-                    session.classType === type
-                      ? "ring-2 ring-ring"
-                      : "hover:bg-accent",
-                    config.color
-                  )}
-                >
-                  {config.label}
-                </button>
-              ))}
+              {sortedClassTypes.length === 0 && (
+                <p className="col-span-2 text-xs text-muted-foreground italic px-1 py-2">
+                  No class types yet. Add some in Settings.
+                </p>
+              )}
+              {sortedClassTypes.map((ct) => {
+                const palette = getPaletteEntry(ct.colorKey);
+                return (
+                  <button
+                    key={ct.id}
+                    onClick={() => handleSelectType(ct.id)}
+                    className={cn(
+                      "text-left text-xs px-2 py-1.5 rounded border transition-colors",
+                      session.classType === ct.id
+                        ? "ring-2 ring-ring"
+                        : "hover:bg-accent",
+                      palette.color
+                    )}
+                  >
+                    {ct.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -250,17 +350,9 @@ function SessionConfigPopover({
 }
 
 function formatDayLabel(dateStr: string) {
-  const d = new Date(dateStr + "T12:00:00");
-  return {
-    dayAbbr: d.toLocaleDateString("en-US", { weekday: "short" }),
-    monthDay: d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }),
-  };
+  const f = formatDateDisplay(dateStr);
+  return { dayAbbr: f.dayAbbr, monthDay: f.monthDay };
 }
-
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function AddSessionDialog({ schedule }: { schedule: Schedule }) {
   const { addSession } = useScheduling();
@@ -287,8 +379,7 @@ function AddSessionDialog({ schedule }: { schedule: Schedule }) {
       toast.error("Please select a date.");
       return;
     }
-    const d = new Date(date + "T12:00:00");
-    const dayOfWeek = DAYS[d.getDay()];
+    const dayOfWeek = dayNameLong(date);
     const session: Session = {
       id: `sess-${schedule.id}-${Date.now()}`,
       scheduleId: schedule.id,
@@ -406,12 +497,7 @@ function ConflictResolutionDialog({
         </DialogHeader>
         <div className="overflow-y-auto space-y-3 pr-1">
           {conflicts.map((c) => {
-            const d = new Date(c.date + "T12:00:00");
-            const dateLabel = d.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            });
+            const dateLabel = formatDateDisplay(c.date).shortLong;
             return (
               <div
                 key={c.sessionId}
@@ -459,10 +545,14 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     getSlotsForSession,
     initializeSlotsForSession,
     sessionSlots,
+    classTypes,
   } = useScheduling();
 
   const [conflicts, setConflicts] = useState<AutoAssignConflict[]>([]);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [autoAssigningSessionIds, setAutoAssigningSessionIds] = useState<
+    Set<string>
+  >(new Set());
 
   const sessions = useMemo(
     () =>
@@ -502,16 +592,11 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
       set.add(`${s.startTime}–${s.endTime}`);
     }
     return [...set].sort((a, b) => {
-      const toMin = (t: string) => {
-        const part = t.split("–")[0].trim();
-        const [time, ampm] = part.split(" ");
-        const [h_, m] = time.split(":").map(Number);
-        let h = h_;
-        if (ampm === "PM" && h !== 12) h += 12;
-        if (ampm === "AM" && h === 12) h = 0;
-        return h * 60 + m;
-      };
-      return toMin(a) - toMin(b);
+      const toMin = (t: string) => parseTimeToMinutes(t.split("–")[0].trim());
+      const am = toMin(a);
+      const bm = toMin(b);
+      if (Number.isNaN(am) || Number.isNaN(bm)) return a.localeCompare(b);
+      return am - bm;
     });
   }, [sessions]);
 
@@ -540,9 +625,18 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     scrollRef.current?.scrollBy({ left: SCROLL_AMOUNT, behavior: "smooth" });
   }, []);
 
-  async function handleAutoAssignSession(session: Session) {
+  async function handleAutoAssignSession(
+    session: Session,
+    strategy: AutoAssignStrategy
+  ) {
+    if (autoAssigningSessionIds.has(session.id)) return;
+    setAutoAssigningSessionIds((prev) => {
+      const next = new Set(prev);
+      next.add(session.id);
+      return next;
+    });
     try {
-      const result = await autoAssignSession(session.id);
+      const result = await autoAssignSession(session.id, strategy);
       if (result.assigned > 0 && result.conflicts.length === 0) {
         toast.success(
           `Assigned ${result.assigned} staff to this session.`
@@ -559,6 +653,12 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
       }
     } catch {
       toast.error("Auto-assign failed.");
+    } finally {
+      setAutoAssigningSessionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(session.id);
+        return next;
+      });
     }
   }
 
@@ -638,8 +738,14 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                       : session.location === "K Sport"
                         ? "KS"
                         : session.location;
-                  const classConfig = session.classType
-                    ? SLOT_TYPE_CONFIG[session.classType]
+                  const classType = session.classType
+                    ? classTypes.find((c) => c.id === session.classType)
+                    : null;
+                  const classConfig = classType
+                    ? {
+                        label: classType.label,
+                        color: getPaletteEntry(classType.colorKey).color,
+                      }
                     : null;
 
                   return (
@@ -688,15 +794,12 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                               </div>
                             </button>
                           </SessionConfigPopover>
-                          <button
-                            type="button"
-                            onClick={() => handleAutoAssignSession(session)}
-                            title="Auto assign staff to this class"
-                            aria-label="Auto assign staff to this class"
-                            className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <Sparkles className="h-3 w-3" />
-                          </button>
+                          <AutoAssignPopover
+                            isLoading={autoAssigningSessionIds.has(session.id)}
+                            onSelect={(strategy) =>
+                              handleAutoAssignSession(session, strategy)
+                            }
+                          />
                         </div>
                         <div className="flex flex-col gap-0.5">
                           {slots.map((slot) => (

@@ -29,7 +29,14 @@ export interface Session {
   endTime: string;
   location: string;
   requiredStaff: number;
-  classType?: SlotType;
+  classType?: string;
+}
+
+export interface ClassType {
+  id: string;
+  label: string;
+  colorKey: string;
+  sortOrder: number;
 }
 
 export interface Schedule {
@@ -40,24 +47,6 @@ export interface Schedule {
   endDate: string;
   sessions: Session[];
 }
-
-export type SlotType =
-  | "hp-speed"
-  | "hp-speed-2"
-  | "hp-flight"
-  | "footskills"
-  | "first-touch-tempo"
-  | "complete-player"
-  | "1v1-transition"
-  | "shooting-finishing"
-  | "ball-masters"
-  | "streetball"
-  | "tournament-prep"
-  | "u5u6-minis"
-  | "u7u8-futures-footskills"
-  | "u7u8-futures-ball-striking"
-  | "u7u8-futures-complete-player"
-  | "general";
 
 export interface SessionSlot {
   id: string;
@@ -86,6 +75,8 @@ export interface AutoAssignResult {
   empty: number;
   conflicts: AutoAssignConflict[];
 }
+
+export type AutoAssignStrategy = "cheap" | "balanced" | "expensive";
 
 export type ReportPeriodType = "weekly" | "monthly";
 export type ReportScope = "breakdown" | "single";

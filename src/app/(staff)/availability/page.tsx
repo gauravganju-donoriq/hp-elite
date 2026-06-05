@@ -38,6 +38,14 @@ import {
 import type { AvailabilityStatus, Session } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  addDays,
+  formatDateDisplay,
+  formatISODate,
+  monthYear,
+  parseISODate,
+  todayISO,
+} from "@/lib/dates";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -96,33 +104,36 @@ const STATUS_CONFIG: Record<
   },
 };
 
-type WeekRow = { date: string; session: Session | null }[];
+type WeekRow = { date: string; sessions: Session[] }[];
 
 function buildCalendarWeeks(sessions: Session[]): WeekRow[] {
   if (sessions.length === 0) return [];
 
-  const byDate = new Map<string, Session>();
-  for (const s of sessions) byDate.set(s.date, s);
+  const byDate = new Map<string, Session[]>();
+  for (const s of sessions) {
+    const existing = byDate.get(s.date);
+    if (existing) existing.push(s);
+    else byDate.set(s.date, [s]);
+  }
+  for (const daySessions of byDate.values()) {
+    daySessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
 
   const sorted = sessions.map((s) => s.date).sort();
-  const first = new Date(sorted[0] + "T12:00:00");
-  const last = new Date(sorted[sorted.length - 1] + "T12:00:00");
+  const first = parseISODate(sorted[0]);
+  const last = parseISODate(sorted[sorted.length - 1]);
 
-  const start = new Date(first);
-  start.setDate(start.getDate() - start.getDay());
-
-  const end = new Date(last);
-  end.setDate(end.getDate() + (6 - end.getDay()));
+  const start = addDays(first, -first.getUTCDay());
+  const end = addDays(last, 6 - last.getUTCDay());
 
   const weeks: WeekRow[] = [];
-  const cur = new Date(start);
-
-  while (cur <= end) {
+  let cur = start;
+  while (cur.getTime() <= end.getTime()) {
     const week: WeekRow = [];
     for (let d = 0; d < 7; d++) {
-      const ds = cur.toISOString().split("T")[0];
-      week.push({ date: ds, session: byDate.get(ds) ?? null });
-      cur.setDate(cur.getDate() + 1);
+      const ds = formatISODate(cur);
+      week.push({ date: ds, sessions: byDate.get(ds) ?? [] });
+      cur = addDays(cur, 1);
     }
     weeks.push(week);
   }
@@ -130,19 +141,11 @@ function buildCalendarWeeks(sessions: Session[]): WeekRow[] {
 }
 
 function formatFullDate(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return formatDateDisplay(dateStr).fullLong;
 }
 
 function formatShortDate(dateStr: string) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateDisplay(dateStr).shortLong;
 }
 
 export default function AvailabilityPage() {
@@ -152,11 +155,20 @@ export default function AvailabilityPage() {
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [openPopover, setOpenPopover] = useState<string | null>(null);
   const [expandedMobileSession, setExpandedMobileSession] = useState<string | null>(null);
-  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
-  const [viewMonthIdx, setViewMonthIdx] = useState(() => new Date().getMonth());
+  const [viewYear, setViewYear] = useState(() => {
+    const t = parseISODate(todayISO());
+    return t.getUTCFullYear();
+  });
+  const [viewMonthIdx, setViewMonthIdx] = useState(() => {
+    const t = parseISODate(todayISO());
+    return t.getUTCMonth();
+  });
 
+  // Note: when the user is authenticated but unlinked, the staff layout
+  // renders an UnlinkedAccount banner before this page mounts. No redirect.
   useEffect(() => {
-    if (!identityLoading && !identity) router.replace("/login");
+    // Intentionally empty: prior behaviour redirected to /login, which
+    // caused a loop for unlinked users. Now handled in (staff)/layout.tsx.
   }, [identity, identityLoading, router]);
 
   const activeScheduleId = selectedSchedule || (schedules.length > 0 ? schedules[0].id : "");
@@ -200,15 +212,15 @@ export default function AvailabilityPage() {
   }
 
   function goToToday() {
-    const now = new Date();
-    setViewYear(now.getFullYear());
-    setViewMonthIdx(now.getMonth());
+    const t = parseISODate(todayISO());
+    setViewYear(t.getUTCFullYear());
+    setViewMonthIdx(t.getUTCMonth());
   }
 
   const weeks = allWeeks.filter((week) =>
     week.some((day) => {
-      const d = new Date(day.date + "T12:00:00");
-      return d.getFullYear() === viewYear && d.getMonth() === viewMonthIdx;
+      const { year, month } = monthYear(day.date);
+      return year === viewYear && month === viewMonthIdx;
     })
   );
 
@@ -218,14 +230,14 @@ export default function AvailabilityPage() {
   );
 
   const filteredMobileSessions = sessions.filter((s) => {
-    const d = new Date(s.date + "T12:00:00");
-    return d.getFullYear() === viewYear && d.getMonth() === viewMonthIdx;
+    const { year, month } = monthYear(s.date);
+    return year === viewYear && month === viewMonthIdx;
   });
 
   const sessionMonths = new Set(
     sessions.map((s) => {
-      const d = new Date(s.date + "T12:00:00");
-      return `${d.getFullYear()}-${d.getMonth()}`;
+      const { year, month } = monthYear(s.date);
+      return `${year}-${month}`;
     })
   );
   const hasPrevMonth = sessionMonths.has(
@@ -304,7 +316,7 @@ export default function AvailabilityPage() {
 
   const pct =
     sessions.length > 0 ? Math.round((responded / sessions.length) * 100) : 0;
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = todayISO();
 
   function renderStatusButtons(session: Session, entry: ReturnType<typeof myAvailMap.get>, mobile?: boolean) {
     return (
@@ -645,137 +657,140 @@ export default function AvailabilityPage() {
                   return (
                     <div key={wi}>
                       <div className="grid grid-cols-7">
-                        {week.map(({ date, session }, di) => {
-                          const dayNum = new Date(date + "T12:00:00").getDate();
+                        {week.map(({ date, sessions: daySessions }, di) => {
+                          const dayNum = parseISODate(date).getUTCDate();
                           const isToday = date === todayStr;
 
-                          if (!session) {
-                            return (
-                              <div
-                                key={di}
-                                className="min-h-[120px] border-r last:border-r-0 bg-muted/10 p-2 opacity-40"
-                              >
-                                <span className="text-xs text-muted-foreground">
+                          return (
+                            <div
+                              key={di}
+                              className={cn(
+                                "min-h-[120px] border-r last:border-r-0 p-2 align-top",
+                                daySessions.length === 0 && "bg-muted/10 opacity-40",
+                                isToday && "ring-2 ring-inset ring-primary"
+                              )}
+                            >
+                              <div className="flex items-start justify-between mb-1.5">
+                                <span
+                                  className={cn(
+                                    "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold",
+                                    isToday
+                                      ? "bg-primary text-primary-foreground"
+                                      : daySessions.length === 0
+                                        ? "text-muted-foreground"
+                                        : "text-foreground"
+                                  )}
+                                >
                                   {dayNum}
                                 </span>
                               </div>
-                            );
-                          }
 
-                          const entry = myAvailMap.get(session.id);
-                          const status: AvailabilityStatus =
-                            entry?.status ?? "pending";
-                          const cfg = STATUS_CONFIG[status];
+                              <div className="space-y-1.5">
+                                {daySessions.map((session) => {
+                                  const entry = myAvailMap.get(session.id);
+                                  const status: AvailabilityStatus =
+                                    entry?.status ?? "pending";
+                                  const cfg = STATUS_CONFIG[status];
 
-                          return (
-                            <Popover
-                              key={session.id}
-                              open={openPopover === session.id}
-                              onOpenChange={(open) =>
-                                setOpenPopover(open ? session.id : null)
-                              }
-                            >
-                              <PopoverTrigger asChild>
-                                <button
-                                  className={cn(
-                                    "min-h-[120px] border-r last:border-r-0 p-2 text-left transition-all relative group",
-                                    "hover:ring-2 hover:ring-inset hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-                                    cfg.cellBg,
-                                    isToday && "ring-2 ring-inset ring-primary"
-                                  )}
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <span
-                                      className={cn(
-                                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold",
-                                        isToday
-                                          ? "bg-primary text-primary-foreground"
-                                          : "text-foreground"
-                                      )}
+                                  return (
+                                    <Popover
+                                      key={session.id}
+                                      open={openPopover === session.id}
+                                      onOpenChange={(open) =>
+                                        setOpenPopover(open ? session.id : null)
+                                      }
                                     >
-                                      {dayNum}
-                                    </span>
-                                  </div>
+                                      <PopoverTrigger asChild>
+                                        <button
+                                          className={cn(
+                                            "w-full rounded-md border p-1.5 text-left transition-all",
+                                            "hover:ring-2 hover:ring-inset hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+                                            cfg.cellBg || "bg-background"
+                                          )}
+                                        >
+                                          <div className="space-y-0.5">
+                                            <div className="text-[11px] leading-tight font-medium text-muted-foreground flex items-center gap-1">
+                                              <Clock className="h-3 w-3 shrink-0" />
+                                              <span>
+                                                {session.startTime}&ndash;
+                                                {session.endTime}
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] leading-tight text-muted-foreground flex items-center gap-1">
+                                              <MapPin className="h-3 w-3 shrink-0" />
+                                              <span className="truncate">
+                                                {session.location}
+                                              </span>
+                                            </div>
+                                          </div>
 
-                                  <div className="mt-1.5 space-y-0.5">
-                                    <div className="text-[11px] leading-tight font-medium text-muted-foreground flex items-center gap-1">
-                                      <Clock className="h-3 w-3 shrink-0" />
-                                      <span>
-                                        {session.startTime}&ndash;
-                                        {session.endTime}
-                                      </span>
-                                    </div>
-                                    <div className="text-[11px] leading-tight text-muted-foreground flex items-center gap-1">
-                                      <MapPin className="h-3 w-3 shrink-0" />
-                                      <span className="truncate">
-                                        {session.location}
-                                      </span>
-                                    </div>
-                                  </div>
+                                          <div className="mt-1.5">
+                                            <span className={cn(
+                                              "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border",
+                                              cfg.badgeClass
+                                            )}>
+                                              {cfg.icon}
+                                              {status === "pending" ? "Tap to set" : cfg.label}
+                                            </span>
+                                          </div>
 
-                                  <div className="mt-2">
-                                    <span className={cn(
-                                      "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border",
-                                      cfg.badgeClass
-                                    )}>
-                                      {cfg.icon}
-                                      {status === "pending" ? "Tap to set" : cfg.label}
-                                    </span>
-                                  </div>
+                                          {entry?.customStartTime && (
+                                            <div className="mt-1 text-[10px] text-muted-foreground/70 italic truncate">
+                                              Custom: {entry.customStartTime}
+                                              {entry.customEndTime && `–${entry.customEndTime}`}
+                                            </div>
+                                          )}
+                                        </button>
+                                      </PopoverTrigger>
 
-                                  {entry?.customStartTime && (
-                                    <div className="mt-1 text-[10px] text-muted-foreground/70 italic truncate">
-                                      Custom: {entry.customStartTime}
-                                      {entry.customEndTime && `–${entry.customEndTime}`}
-                                    </div>
-                                  )}
-                                </button>
-                              </PopoverTrigger>
+                                      <PopoverContent
+                                        className="w-72"
+                                        side="bottom"
+                                        align="center"
+                                        collisionPadding={16}
+                                        avoidCollisions
+                                      >
+                                        <div className="space-y-3">
+                                          <div>
+                                            <div className="font-semibold">
+                                              {formatFullDate(session.date)}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
+                                              <span className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                {session.startTime} - {session.endTime}
+                                              </span>
+                                              <span className="flex items-center gap-1">
+                                                <MapPin className="h-3 w-3" />
+                                                {session.location}
+                                              </span>
+                                            </div>
+                                          </div>
 
-                              <PopoverContent
-                                className="w-72"
-                                side="bottom"
-                                align="center"
-                                collisionPadding={16}
-                                avoidCollisions
-                              >
-                                <div className="space-y-3">
-                                  <div>
-                                    <div className="font-semibold">
-                                      {formatFullDate(session.date)}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {session.startTime} - {session.endTime}
-                                      </span>
-                                      <span className="flex items-center gap-1">
-                                        <MapPin className="h-3 w-3" />
-                                        {session.location}
-                                      </span>
-                                    </div>
-                                  </div>
+                                          <div className="space-y-1.5">
+                                            <Label className="text-xs font-medium text-muted-foreground">
+                                              Can you work this session?
+                                            </Label>
+                                            {renderStatusButtons(session, entry)}
+                                          </div>
 
-                                  <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium text-muted-foreground">
-                                      Can you work this session?
-                                    </Label>
-                                    {renderStatusButtons(session, entry)}
-                                  </div>
-
-                                  {renderCustomTime(session, entry)}
-                                  {entry?.status === "available" && (
-                                    <Button
-                                      size="sm"
-                                      className="w-full h-7 text-xs mt-1"
-                                      onClick={() => setOpenPopover(null)}
-                                    >
-                                      Done
-                                    </Button>
-                                  )}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                                          {renderCustomTime(session, entry)}
+                                          {entry?.status === "available" && (
+                                            <Button
+                                              size="sm"
+                                              className="w-full h-7 text-xs mt-1"
+                                              onClick={() => setOpenPopover(null)}
+                                            >
+                                              Done
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
                         })}
                       </div>

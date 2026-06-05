@@ -727,6 +727,187 @@ describe("autoAssignSession", () => {
     expect(insertCalls).toHaveLength(2);
   });
 
+  it("cheap strategy picks trials first, then juniors", async () => {
+    const lead = { ...staffRow, id: "s-lead", years_experience: 8, role: "lead" };
+    const exp = { ...staffRow, id: "s-exp", years_experience: 5, role: "experience" };
+    const junior = { ...staffRow, id: "s-jr", years_experience: 1, role: "junior" };
+    const trial = { ...staffRow, id: "s-tr", years_experience: 0, role: "trial" };
+
+    const session = { ...sessionRow, required_staff: 2 };
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [session] })
+      .mockResolvedValueOnce({ rows: [lead, exp, junior, trial] })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...availRow, staff_id: "s-lead", status: "available" },
+          { ...availRow, staff_id: "s-exp", status: "available" },
+          { ...availRow, staff_id: "s-jr", status: "available" },
+          { ...availRow, staff_id: "s-tr", status: "available" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...slotRow, id: "slot-sess1-0", slot_index: 0 },
+          { ...slotRow, id: "slot-sess1-1", slot_index: 1 },
+        ],
+      });
+
+    mockClientQuery.mockResolvedValue({});
+
+    const result = await autoAssignSession("sess1", "cheap");
+    expect(result.assigned).toBe(2);
+
+    const assignCalls = mockClientQuery.mock.calls.filter(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        c[0].includes("UPDATE session_slot SET assigned_staff_id")
+    );
+    expect(assignCalls[0][1]).toEqual(["s-tr", "slot-sess1-0"]);
+    expect(assignCalls[1][1]).toEqual(["s-jr", "slot-sess1-1"]);
+  });
+
+  it("balanced strategy picks 1 lead, 1 experience, rest juniors", async () => {
+    const lead = { ...staffRow, id: "s-lead", years_experience: 8, role: "lead" };
+    const exp = { ...staffRow, id: "s-exp", years_experience: 5, role: "experience" };
+    const junior1 = { ...staffRow, id: "s-jr1", years_experience: 2, role: "junior" };
+    const junior2 = { ...staffRow, id: "s-jr2", years_experience: 1, role: "junior" };
+    const trial = { ...staffRow, id: "s-tr", years_experience: 0, role: "trial" };
+
+    const session = { ...sessionRow, required_staff: 4 };
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [session] })
+      .mockResolvedValueOnce({ rows: [lead, exp, junior1, junior2, trial] })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...availRow, staff_id: "s-lead", status: "available" },
+          { ...availRow, staff_id: "s-exp", status: "available" },
+          { ...availRow, staff_id: "s-jr1", status: "available" },
+          { ...availRow, staff_id: "s-jr2", status: "available" },
+          { ...availRow, staff_id: "s-tr", status: "available" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...slotRow, id: "slot-sess1-0", slot_index: 0 },
+          { ...slotRow, id: "slot-sess1-1", slot_index: 1 },
+          { ...slotRow, id: "slot-sess1-2", slot_index: 2 },
+          { ...slotRow, id: "slot-sess1-3", slot_index: 3 },
+        ],
+      });
+
+    mockClientQuery.mockResolvedValue({});
+
+    const result = await autoAssignSession("sess1", "balanced");
+    expect(result.assigned).toBe(4);
+
+    const assignCalls = mockClientQuery.mock.calls.filter(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        c[0].includes("UPDATE session_slot SET assigned_staff_id")
+    );
+    expect(assignCalls[0][1]).toEqual(["s-lead", "slot-sess1-0"]);
+    expect(assignCalls[1][1]).toEqual(["s-exp", "slot-sess1-1"]);
+    expect(assignCalls[2][1]).toEqual(["s-jr1", "slot-sess1-2"]);
+    expect(assignCalls[3][1]).toEqual(["s-jr2", "slot-sess1-3"]);
+  });
+
+  it("expensive strategy picks 1 lead, 2 experience, then trials before juniors", async () => {
+    const lead = { ...staffRow, id: "s-lead", years_experience: 8, role: "lead" };
+    const exp1 = { ...staffRow, id: "s-exp1", years_experience: 6, role: "experience" };
+    const exp2 = { ...staffRow, id: "s-exp2", years_experience: 4, role: "experience" };
+    const junior = { ...staffRow, id: "s-jr", years_experience: 2, role: "junior" };
+    const trial = { ...staffRow, id: "s-tr", years_experience: 0, role: "trial" };
+
+    const session = { ...sessionRow, required_staff: 5 };
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [session] })
+      .mockResolvedValueOnce({ rows: [lead, exp1, exp2, junior, trial] })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...availRow, staff_id: "s-lead", status: "available" },
+          { ...availRow, staff_id: "s-exp1", status: "available" },
+          { ...availRow, staff_id: "s-exp2", status: "available" },
+          { ...availRow, staff_id: "s-jr", status: "available" },
+          { ...availRow, staff_id: "s-tr", status: "available" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...slotRow, id: "slot-sess1-0", slot_index: 0 },
+          { ...slotRow, id: "slot-sess1-1", slot_index: 1 },
+          { ...slotRow, id: "slot-sess1-2", slot_index: 2 },
+          { ...slotRow, id: "slot-sess1-3", slot_index: 3 },
+          { ...slotRow, id: "slot-sess1-4", slot_index: 4 },
+        ],
+      });
+
+    mockClientQuery.mockResolvedValue({});
+
+    const result = await autoAssignSession("sess1", "expensive");
+    expect(result.assigned).toBe(5);
+
+    const assignCalls = mockClientQuery.mock.calls.filter(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        c[0].includes("UPDATE session_slot SET assigned_staff_id")
+    );
+    expect(assignCalls[0][1]).toEqual(["s-lead", "slot-sess1-0"]);
+    expect(assignCalls[1][1]).toEqual(["s-exp1", "slot-sess1-1"]);
+    expect(assignCalls[2][1]).toEqual(["s-exp2", "slot-sess1-2"]);
+    expect(assignCalls[3][1]).toEqual(["s-tr", "slot-sess1-3"]);
+    expect(assignCalls[4][1]).toEqual(["s-jr", "slot-sess1-4"]);
+  });
+
+  it("respects existing role quotas when applying balanced strategy", async () => {
+    // A lead is already manually assigned; balanced should not add another lead.
+    const lead1 = { ...staffRow, id: "s-lead1", years_experience: 8, role: "lead" };
+    const lead2 = { ...staffRow, id: "s-lead2", years_experience: 7, role: "lead" };
+    const exp = { ...staffRow, id: "s-exp", years_experience: 5, role: "experience" };
+    const junior = { ...staffRow, id: "s-jr", years_experience: 1, role: "junior" };
+
+    const session = { ...sessionRow, required_staff: 3 };
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [session] })
+      .mockResolvedValueOnce({ rows: [lead1, lead2, exp, junior] })
+      .mockResolvedValueOnce({
+        rows: [
+          { ...availRow, staff_id: "s-lead2", status: "available" },
+          { ...availRow, staff_id: "s-exp", status: "available" },
+          { ...availRow, staff_id: "s-jr", status: "available" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...slotRow,
+            id: "slot-sess1-0",
+            slot_index: 0,
+            assigned_staff_id: "s-lead1",
+          },
+          { ...slotRow, id: "slot-sess1-1", slot_index: 1 },
+          { ...slotRow, id: "slot-sess1-2", slot_index: 2 },
+        ],
+      });
+
+    mockClientQuery.mockResolvedValue({});
+
+    const result = await autoAssignSession("sess1", "balanced");
+    expect(result.assigned).toBe(2);
+
+    const assignCalls = mockClientQuery.mock.calls.filter(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        c[0].includes("UPDATE session_slot SET assigned_staff_id")
+    );
+    // Lead quota consumed by manual assignment; expect experience then junior.
+    expect(assignCalls[0][1]).toEqual(["s-exp", "slot-sess1-1"]);
+    expect(assignCalls[1][1]).toEqual(["s-jr", "slot-sess1-2"]);
+  });
+
   it("rolls back on error during assignment", async () => {
     const session = { ...sessionRow, required_staff: 1 };
 

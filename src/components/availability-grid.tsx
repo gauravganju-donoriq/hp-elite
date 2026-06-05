@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { formatDateDisplay } from "@/lib/dates";
 
 const STATUS_CONFIG: Record<
   AvailabilityStatus,
@@ -41,11 +42,8 @@ const STATUS_CONFIG: Record<
 };
 
 function formatDateHeader(dateStr: string) {
-  const d = new Date(dateStr + "T12:00:00");
-  return {
-    dayAbbr: d.toLocaleDateString("en-US", { weekday: "short" }),
-    monthDay: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-  };
+  const f = formatDateDisplay(dateStr);
+  return { dayAbbr: f.dayAbbr, monthDay: f.monthDay };
 }
 
 function CellPopover({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, unauthorized, forbidden, isAdmin } from "@/lib/api-auth";
+import pool from "@/lib/db";
 import {
   getSlotsForSession,
   initializeSlotsForSession,
@@ -47,17 +48,31 @@ export async function PATCH(
   if (!session) return unauthorized();
   if (!isAdmin(session)) return forbidden();
 
-  await params;
+  const { id: sessionId } = await params;
   const body = await request.json();
   const { slotId, staffId, action } = body;
 
-  if (!slotId) {
+  if (!slotId || typeof slotId !== "string") {
     return NextResponse.json({ error: "slotId is required" }, { status: 400 });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT session_id FROM session_slot WHERE id = $1`,
+    [slotId]
+  );
+  if (rows.length === 0) {
+    return NextResponse.json({ error: "Slot not found" }, { status: 404 });
+  }
+  if (rows[0].session_id !== sessionId) {
+    return NextResponse.json(
+      { error: "Slot does not belong to this session" },
+      { status: 400 }
+    );
   }
 
   if (action === "unassign") {
     await unassignSlot(slotId);
-  } else if (staffId) {
+  } else if (staffId && typeof staffId === "string") {
     await assignStaffToSlot(slotId, staffId);
   } else {
     return NextResponse.json({ error: "staffId or action=unassign required" }, { status: 400 });

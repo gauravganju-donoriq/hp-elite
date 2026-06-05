@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { StaffNavbar } from "@/components/staff-navbar";
+import { UnlinkedAccount } from "@/components/unlinked-account";
 import { useStaffIdentity } from "@/lib/staff-context";
 
 export default function StaffLayout({
@@ -10,7 +11,7 @@ export default function StaffLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin, loading } = useStaffIdentity();
+  const { isAdmin, unlinked, loading } = useStaffIdentity();
   const router = useRouter();
 
   useEffect(() => {
@@ -28,6 +29,17 @@ export default function StaffLayout({
   }
 
   if (isAdmin) return null;
+
+  if (unlinked) {
+    return (
+      <>
+        <StaffNavbar />
+        <main className="px-4 py-6 sm:px-6 lg:px-8">
+          <UnlinkedAccount />
+        </main>
+      </>
+    );
+  }
 
   return (
     <>

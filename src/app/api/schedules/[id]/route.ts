@@ -22,6 +22,8 @@ export async function GET(
   return NextResponse.json(schedule);
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -32,6 +34,28 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
+
+  if (body.startDate !== undefined && !ISO_DATE.test(body.startDate)) {
+    return NextResponse.json({ error: "Invalid startDate", field: "startDate" }, { status: 400 });
+  }
+  if (body.endDate !== undefined && !ISO_DATE.test(body.endDate)) {
+    return NextResponse.json({ error: "Invalid endDate", field: "endDate" }, { status: 400 });
+  }
+  if (body.startDate !== undefined || body.endDate !== undefined) {
+    const existing = await getScheduleById(id);
+    if (!existing) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    }
+    const startDate = body.startDate ?? existing.startDate;
+    const endDate = body.endDate ?? existing.endDate;
+    if (startDate > endDate) {
+      return NextResponse.json(
+        { error: "startDate must be on or before endDate", field: "endDate" },
+        { status: 400 }
+      );
+    }
+  }
+
   const success = await updateSchedule(id, body);
 
   if (!success) {

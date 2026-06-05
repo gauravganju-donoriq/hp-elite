@@ -19,6 +19,7 @@ export function AdminNavbar() {
     { href: "/admin", label: "Schedules" },
     { href: "/admin/staff", label: "Staff Roster" },
     { href: "/admin/reports", label: "Reports" },
+    { href: "/admin/settings", label: "Settings" },
   ];
 
   async function handleSignOut() {

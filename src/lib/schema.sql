@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS staff (
 );
 
 CREATE INDEX IF NOT EXISTS idx_staff_user_id ON staff(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS staff_user_id_unique ON staff(user_id) WHERE user_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS schedule (
   id TEXT PRIMARY KEY,
@@ -19,6 +20,14 @@ CREATE TABLE IF NOT EXISTS schedule (
   description TEXT,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS class_type (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  color_key TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -31,11 +40,12 @@ CREATE TABLE IF NOT EXISTS training_session (
   end_time TEXT NOT NULL,
   location TEXT NOT NULL,
   required_staff INTEGER NOT NULL DEFAULT 1,
-  class_type TEXT
+  class_type TEXT REFERENCES class_type(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_training_session_schedule_id ON training_session(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_training_session_date ON training_session(date);
+CREATE INDEX IF NOT EXISTS idx_training_session_date_time ON training_session(date, start_time, end_time);
 
 CREATE TABLE IF NOT EXISTS availability (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -59,6 +69,8 @@ CREATE TABLE IF NOT EXISTS session_slot (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_slot_session ON session_slot(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS session_slot_session_index_unique ON session_slot(session_id, slot_index);
+CREATE UNIQUE INDEX IF NOT EXISTS session_slot_session_staff_unique ON session_slot(session_id, assigned_staff_id) WHERE assigned_staff_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS report (
   id TEXT PRIMARY KEY,

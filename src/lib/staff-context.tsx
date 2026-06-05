@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useMemo,
   type ReactNode,
 } from "react";
@@ -15,6 +16,8 @@ interface StaffIdentityContextType {
   identity: { staffId: string } | null;
   staffRecord: Staff | null;
   isAdmin: boolean;
+  /** True when the auth user is logged in but has no linked staff record. */
+  unlinked: boolean;
   userName: string | null;
   userEmail: string | null;
   loading: boolean;
@@ -23,38 +26,61 @@ interface StaffIdentityContextType {
 
 const StaffIdentityContext = createContext<StaffIdentityContextType | null>(null);
 
-function useStaffFromApi(userId: string | undefined) {
+function useStaffFromApi(userId: string | undefined): {
+  staffRecord: Staff | null;
+  loading: boolean;
+  fetched: boolean;
+} {
   const [staffRecord, setStaffRecord] = useState<Staff | null>(null);
   const [fetched, setFetched] = useState(false);
-  const [fetchedFor, setFetchedFor] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(Boolean(userId));
 
-  if (userId && userId !== fetchedFor) {
-    setFetchedFor(userId);
+  useEffect(() => {
+    if (!userId) {
+      setStaffRecord(null);
+      setFetched(true);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    setLoading(true);
     setFetched(false);
-    fetch("/api/staff/me")
-      .then((res) => res.json())
-      .then((data) => {
-        setStaffRecord(data);
+
+    fetch("/api/staff/me", { signal: controller.signal })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setStaffRecord(null);
+        } else {
+          const data = await res.json();
+          setStaffRecord(data ?? null);
+        }
         setFetched(true);
+        setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (cancelled || err?.name === "AbortError") return;
         setStaffRecord(null);
         setFetched(true);
+        setLoading(false);
       });
-  } else if (!userId && fetchedFor) {
-    setFetchedFor(undefined);
-    setStaffRecord(null);
-    setFetched(true);
-  }
 
-  return { staffRecord, loading: userId ? !fetched : false };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [userId]);
+
+  return { staffRecord, loading, fetched };
 }
 
 export function StaffIdentityProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
 
   const userId = session?.user?.id;
-  const { staffRecord, loading: staffLoading } = useStaffFromApi(userId);
+  const { staffRecord, loading: staffLoading, fetched } = useStaffFromApi(userId);
 
   const clearIdentity = useCallback(() => {
     authClient.signOut();
@@ -64,18 +90,20 @@ export function StaffIdentityProvider({ children }: { children: ReactNode }) {
   const userName = session?.user?.name ?? null;
   const userEmail = session?.user?.email ?? null;
   const loading = isPending || staffLoading;
+  const unlinked = Boolean(userId) && fetched && !staffRecord && !isAdmin;
 
-  const value = useMemo(
+  const value = useMemo<StaffIdentityContextType>(
     () => ({
       identity: staffRecord ? { staffId: staffRecord.id } : null,
       staffRecord,
       isAdmin,
+      unlinked,
       userName,
       userEmail,
       loading,
       clearIdentity,
     }),
-    [staffRecord, isAdmin, userName, userEmail, loading, clearIdentity]
+    [staffRecord, isAdmin, unlinked, userName, userEmail, loading, clearIdentity]
   );
 
   return (

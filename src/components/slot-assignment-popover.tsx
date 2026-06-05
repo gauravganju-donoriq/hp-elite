@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useScheduling } from "@/lib/context";
-import type { Session, SessionSlot, SlotType, StaffRole } from "@/lib/types";
+import type { Session, SessionSlot, StaffRole } from "@/lib/types";
 import {
   Popover,
   PopoverContent,
@@ -12,28 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Check, User, X } from "lucide-react";
-
-export const SLOT_TYPE_CONFIG: Record<
-  SlotType,
-  { label: string; color: string }
-> = {
-  "hp-speed": { label: "HP Speed", color: "bg-blue-100 text-blue-800 border-blue-300" },
-  "hp-speed-2": { label: "HP Speed 2", color: "bg-blue-100 text-blue-800 border-blue-300" },
-  "hp-flight": { label: "HP Flight", color: "bg-sky-100 text-sky-800 border-sky-300" },
-  footskills: { label: "Footskills", color: "bg-purple-100 text-purple-800 border-purple-300" },
-  "first-touch-tempo": { label: "First Touch & Tempo", color: "bg-violet-100 text-violet-800 border-violet-300" },
-  "complete-player": { label: "Complete Player", color: "bg-emerald-100 text-emerald-800 border-emerald-300" },
-  "1v1-transition": { label: "1v1 Transition", color: "bg-orange-100 text-orange-800 border-orange-300" },
-  "shooting-finishing": { label: "Shooting & Finishing", color: "bg-red-100 text-red-800 border-red-300" },
-  "ball-masters": { label: "Ball Masters", color: "bg-amber-100 text-amber-800 border-amber-300" },
-  streetball: { label: "Streetball", color: "bg-lime-100 text-lime-800 border-lime-300" },
-  "tournament-prep": { label: "Tournament Prep", color: "bg-rose-100 text-rose-800 border-rose-300" },
-  "u5u6-minis": { label: "U5/U6 Minis", color: "bg-pink-100 text-pink-800 border-pink-300" },
-  "u7u8-futures-footskills": { label: "U7/U8 Futures Footskills", color: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300" },
-  "u7u8-futures-ball-striking": { label: "U7/U8 Futures Ball Striking", color: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300" },
-  "u7u8-futures-complete-player": { label: "U7/U8 Futures Complete Player", color: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300" },
-  general: { label: "General", color: "bg-gray-100 text-gray-700 border-gray-300" },
-};
 
 const ROLE_LABELS: Record<StaffRole, string> = {
   lead: "L",
@@ -119,12 +97,12 @@ export function SlotAssignmentPopover({
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
   function handleAssign(staffId: string) {
-    assignStaffToSlot(slot.id, staffId);
+    assignStaffToSlot(session.id, slot.id, staffId);
     setOpen(false);
   }
 
   function handleClear() {
-    unassignSlot(slot.id);
+    unassignSlot(session.id, slot.id);
     setOpen(false);
   }
 
