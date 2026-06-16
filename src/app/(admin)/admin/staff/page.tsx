@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useScheduling } from "@/lib/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -69,6 +70,12 @@ export default function StaffManagementPage() {
   const [linkEmail, setLinkEmail] = useState("");
   const [linkPassword, setLinkPassword] = useState("");
   const [linking, setLinking] = useState(false);
+
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetStaffId, setResetStaffId] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const sortedStaff = [...staff].sort(
     (a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
@@ -200,6 +207,49 @@ export default function StaffManagementPage() {
     }
   }
 
+  function openResetPassword(id: string) {
+    setResetStaffId(id);
+    setResetPassword("");
+    setResetConfirm("");
+    setResetDialogOpen(true);
+  }
+
+  async function handleResetPassword() {
+    if (!resetStaffId) return;
+    if (resetPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const res = await fetch("/api/admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: resetStaffId,
+          newPassword: resetPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to reset password");
+      }
+
+      toast.success("Password reset successfully.");
+      setResetDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reset password.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   const roleCounts = staff.reduce(
     (acc, s) => {
       acc[s.role] = (acc[s.role] || 0) + 1;
@@ -263,8 +313,7 @@ export default function StaffManagementPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Password</Label>
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Set a password"
@@ -352,7 +401,7 @@ export default function StaffManagementPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Experience</TableHead>
                 <TableHead>Account</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead className="w-[140px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -373,10 +422,17 @@ export default function StaffManagementPage() {
                   </TableCell>
                   <TableCell>
                     {member.userId ? (
-                      <Badge variant="secondary" className="gap-1">
-                        <KeyRound className="h-3 w-3" />
-                        Linked
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="secondary" className="gap-1 w-fit">
+                          <KeyRound className="h-3 w-3" />
+                          Linked
+                        </Badge>
+                        {member.email && (
+                          <span className="text-xs text-muted-foreground">
+                            {member.email}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <Button
                         variant="outline"
@@ -391,6 +447,16 @@ export default function StaffManagementPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
+                      {member.userId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Reset password"
+                          onClick={() => openResetPassword(member.id)}
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -442,8 +508,7 @@ export default function StaffManagementPage() {
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 value={linkPassword}
                 onChange={(e) => setLinkPassword(e.target.value)}
                 placeholder="Set a password"
@@ -455,6 +520,57 @@ export default function StaffManagementPage() {
               </Button>
               <Button onClick={handleLinkAccount} disabled={linking}>
                 {linking ? "Creating..." : "Create Account"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Set a new password for{" "}
+            <span className="font-medium text-foreground">
+              {staff.find((s) => s.id === resetStaffId)?.firstName}{" "}
+              {staff.find((s) => s.id === resetStaffId)?.lastName}
+            </span>
+            {staff.find((s) => s.id === resetStaffId)?.email && (
+              <>
+                {" "}(
+                <span className="font-medium text-foreground">
+                  {staff.find((s) => s.id === resetStaffId)?.email}
+                </span>
+                )
+              </>
+            )}
+            . Share the new password with them so they can sign in.
+          </p>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <PasswordInput
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="At least 8 characters"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm Password</Label>
+              <PasswordInput
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                placeholder="Re-enter password"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleResetPassword} disabled={resetting}>
+                {resetting ? "Resetting..." : "Reset Password"}
               </Button>
             </div>
           </div>

@@ -28,6 +28,18 @@ export async function getAllStaff(): Promise<Staff[]> {
   return rows.map(mapStaffRow);
 }
 
+export async function getAllStaffWithEmail(): Promise<Staff[]> {
+  const { rows } = await pool.query(
+    `SELECT s.id, s.user_id, s.first_name, s.last_name, s.role, s.years_experience, u.email
+     FROM staff s LEFT JOIN "user" u ON u.id = s.user_id
+     ORDER BY s.last_name, s.first_name`
+  );
+  return rows.map((r) => ({
+    ...mapStaffRow(r),
+    email: (r.email as string) || undefined,
+  }));
+}
+
 export async function getStaffById(id: string): Promise<Staff | null> {
   const { rows } = await pool.query(
     `SELECT id, user_id, first_name, last_name, role, years_experience FROM staff WHERE id = $1`,

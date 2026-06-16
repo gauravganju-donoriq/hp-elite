@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, unauthorized, forbidden, isAdmin } from "@/lib/api-auth";
-import { getAllStaff, createStaff } from "@/lib/queries";
+import { getAllStaff, getAllStaffWithEmail, createStaff } from "@/lib/queries";
 
 export async function GET() {
   const session = await getSession();
   if (!session) return unauthorized();
 
-  const staff = await getAllStaff();
   if (isAdmin(session)) {
+    const staff = await getAllStaffWithEmail();
     return NextResponse.json(staff);
   }
+
+  const staff = await getAllStaff();
   // Non-admins get a slim roster: enough to render names of assigned staff
   // in shared views, but no contact/auth/sensitive data.
   const slim = staff.map((s) => ({

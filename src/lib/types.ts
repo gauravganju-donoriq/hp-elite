@@ -3,6 +3,7 @@ export type StaffRole = "lead" | "experience" | "junior" | "trial";
 export interface Staff {
   id: string;
   userId?: string;
+  email?: string;
   firstName: string;
   lastName: string;
   role: StaffRole;
