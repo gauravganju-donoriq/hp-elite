@@ -167,6 +167,7 @@ function SessionConfigPopover({
   const { updateSession, removeSession, initializeSlotsForSession, classTypes } =
     useScheduling();
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [staffCount, setStaffCount] = useState(session.requiredStaff);
   const [startTime, setStartTime] = useState(session.startTime);
   const [endTime, setEndTime] = useState(session.endTime);
@@ -185,10 +186,7 @@ function SessionConfigPopover({
   }
 
   function handleStaffChange(delta: number) {
-    const next = Math.max(1, staffCount + delta);
-    setStaffCount(next);
-    updateSession(schedule.id, session.id, { requiredStaff: next });
-    initializeSlotsForSession(session.id, next);
+    setStaffCount((prev) => Math.max(1, prev + delta));
   }
 
   function handleOpenChange(isOpen: boolean) {
@@ -201,15 +199,24 @@ function SessionConfigPopover({
     }
   }
 
-  function handleSaveDetails() {
+  async function handleSaveDetails() {
+    if (saving) return;
     const updates: Partial<Session> = {};
     if (startTime !== session.startTime) updates.startTime = startTime;
     if (endTime !== session.endTime) updates.endTime = endTime;
     if (location !== session.location) updates.location = location;
+    const staffCountChanged = staffCount !== session.requiredStaff;
+    if (staffCountChanged) updates.requiredStaff = staffCount;
+    setSaving(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     if (Object.keys(updates).length > 0) {
       updateSession(schedule.id, session.id, updates);
-      toast.success("Session updated.");
     }
+    if (staffCountChanged) {
+      initializeSlotsForSession(session.id, staffCount);
+    }
+    setSaving(false);
+    toast.success("Changes saved successfully.");
   }
 
   function handleDeleteSession() {
@@ -328,8 +335,16 @@ function SessionConfigPopover({
               size="sm"
               className="w-full h-7 text-xs"
               onClick={handleSaveDetails}
+              disabled={saving}
             >
-              Save Details
+              {saving ? (
+                <>
+                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save Details"
+              )}
             </Button>
           </div>
 
@@ -565,16 +580,20 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     [schedule.sessions]
   );
 
-  const initializedRef = useRef(new Set<string>());
+  const reconciledRef = useRef(new Set<string>());
 
   useEffect(() => {
     for (const session of sessions) {
-      if (initializedRef.current.has(session.id)) continue;
+      if (session.requiredStaff <= 0) continue;
       const slots = getSlotsForSession(session.id);
-      if (slots.length === 0 && session.requiredStaff > 0) {
-        initializedRef.current.add(session.id);
-        initializeSlotsForSession(session.id, session.requiredStaff);
-      }
+      if (slots.length === session.requiredStaff) continue;
+      // Self-heal any session whose slot rows drifted from its required
+      // staff count (e.g. a slot write that never committed). Keyed by the
+      // target count so we only attempt each reconcile once.
+      const key = `${session.id}:${session.requiredStaff}`;
+      if (reconciledRef.current.has(key)) continue;
+      reconciledRef.current.add(key);
+      initializeSlotsForSession(session.id, session.requiredStaff);
     }
   }, [sessions, getSlotsForSession, initializeSlotsForSession]);
 

@@ -110,6 +110,35 @@ export async function deleteStaff(id: string): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
+// --------------- Auth users ---------------
+
+export async function getUserByEmail(
+  email: string
+): Promise<{ id: string; email: string } | null> {
+  const { rows } = await pool.query(
+    `SELECT id, email FROM "user" WHERE lower(email) = lower($1) LIMIT 1`,
+    [email]
+  );
+  return rows[0] ? { id: rows[0].id as string, email: rows[0].email as string } : null;
+}
+
+export async function updateUserEmail(userId: string, email: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE "user" SET email = $1, "updatedAt" = now() WHERE id = $2`,
+    [email, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+// Hard delete an auth user and all rows that reference it. Better Auth's
+// removeUser is the preferred path, but this guarantees no orphaned user/
+// account/session rows are left behind (which would block reusing the email).
+export async function hardDeleteUser(userId: string): Promise<void> {
+  await pool.query(`DELETE FROM session WHERE "userId" = $1`, [userId]);
+  await pool.query(`DELETE FROM account WHERE "userId" = $1`, [userId]);
+  await pool.query(`DELETE FROM "user" WHERE id = $1`, [userId]);
+}
+
 function mapStaffRow(row: Record<string, unknown>): Staff {
   return {
     id: row.id as string,
@@ -450,8 +479,7 @@ export async function setSlotCount(
       if (haveIdx.has(i)) continue;
       await client.query(
         `INSERT INTO session_slot (id, session_id, slot_index)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (session_id, slot_index) DO NOTHING`,
+         VALUES ($1, $2, $3)`,
         [`slot-${sessionId}-${i}`, sessionId, i]
       );
     }

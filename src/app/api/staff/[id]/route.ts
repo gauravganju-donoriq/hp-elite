@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession, unauthorized, forbidden, isAdmin } from "@/lib/api-auth";
-import { getStaffById, updateStaff, deleteStaff } from "@/lib/queries";
+import { getStaffById, updateStaff, deleteStaff, hardDeleteUser } from "@/lib/queries";
 import { auth } from "@/lib/auth";
 
 export async function GET(
@@ -56,9 +56,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Staff not found" }, { status: 404 });
   }
 
-  // Best-effort: remove the linked auth user so they can't sign in any more
-  // and end up stuck on the unlinked-account screen. If this fails (already
-  // removed, network blip, etc.) we still consider the staff deletion done.
+  // Remove the linked auth user so they can't sign in any more and so the
+  // email can be reused later. Try Better Auth's removeUser first, then always
+  // run a hard delete to clean up any leftover user/account/session rows.
   if (existing.userId) {
     try {
       await auth.api.removeUser({
@@ -67,7 +67,16 @@ export async function DELETE(
       });
     } catch (err) {
       console.error(
-        `Failed to remove linked auth user ${existing.userId} for staff ${id}:`,
+        `removeUser failed for ${existing.userId} (staff ${id}); falling back to hard delete:`,
+        err
+      );
+    }
+
+    try {
+      await hardDeleteUser(existing.userId);
+    } catch (err) {
+      console.error(
+        `Failed to hard-delete auth user ${existing.userId} for staff ${id}:`,
         err
       );
     }

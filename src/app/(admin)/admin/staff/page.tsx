@@ -81,6 +81,8 @@ export default function StaffManagementPage() {
     (a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
   );
 
+  const editingMember = editId ? staff.find((s) => s.id === editId) : undefined;
+
   function openAdd() {
     setEditId(null);
     setFirstName("");
@@ -98,7 +100,7 @@ export default function StaffManagementPage() {
     setEditId(id);
     setFirstName(member.firstName);
     setLastName(member.lastName);
-    setEmail("");
+    setEmail(member.email ?? "");
     setPassword("");
     setRole(member.role);
     setYearsExperience(member.yearsExperience ?? 0);
@@ -115,12 +117,35 @@ export default function StaffManagementPage() {
 
     try {
       if (editId) {
+        const member = staff.find((s) => s.id === editId);
+
         updateStaff(editId, {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role,
           yearsExperience,
         });
+
+        const trimmedEmail = email.trim();
+        if (
+          member?.userId &&
+          trimmedEmail &&
+          trimmedEmail.toLowerCase() !== (member.email ?? "").toLowerCase()
+        ) {
+          const res = await fetch("/api/admin/update-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ staffId: editId, email: trimmedEmail }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || "Failed to update email");
+          }
+
+          await refreshAll();
+        }
+
         toast.success("Staff member updated.");
       } else {
         if (!email.trim() || !password.trim()) {
@@ -319,6 +344,21 @@ export default function StaffManagementPage() {
                       placeholder="Set a password"
                     />
                   </div>
+                </div>
+              )}
+
+              {editId && editingMember?.userId && (
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="staff@example.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used to sign in. Changing it updates their login email.
+                  </p>
                 </div>
               )}
 

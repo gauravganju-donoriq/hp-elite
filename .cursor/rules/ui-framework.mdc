@@ -1,0 +1,46 @@
+---
+description: UI framework structure and style conventions (Next.js + Tailwind v4 + shadcn/Radix)
+globs: src/**/*.tsx,src/**/*.css
+alwaysApply: false
+---
+
+# UI Framework
+
+Stack: **Next.js 16 App Router** (RSC by default) · **React 19** · **Tailwind CSS v4** · **shadcn-style primitives on Radix UI** · **lucide-react** icons · **sonner** toasts · **next-themes** (light/dark).
+
+## Structure
+
+- `src/app/` — routes grouped by audience: `(admin)`, `(staff)`, `(auth)`. Each group owns a `layout.tsx` that does auth-gating (`getSession` + redirect) and renders a navbar + `<main>`.
+- `src/components/ui/` — generic, reusable primitives (Button, Card, Dialog, Input, Badge…). Do not put feature logic here.
+- `src/components/` — feature components composed from `ui/` primitives (e.g. `schedule-card.tsx`, navbars).
+- `src/lib/` — `utils.ts` (`cn`), context providers, data/query helpers, palettes.
+- Page shell: top-level `<div className="space-y-6">`; header row is `flex items-center justify-between` with `h1.text-3xl.font-bold.tracking-tight` + a `text-muted-foreground` subtitle.
+
+## Primitive conventions (match existing files exactly)
+
+- Components are **functions** (not `forwardRef`), typed `React.ComponentProps<"el">` (+ `VariantProps` when using `cva`).
+- Always spread `{...props}`, set a `data-slot="<name>"` attribute, and merge classes with `cn(...)` so callers can override via `className`.
+- Variants use `class-variance-authority`; expose `xxxVariants` alongside the component. Support `asChild` via `Slot.Root` from `radix-ui` where composition is useful.
+- Import Radix as namespaces: `import { Dialog as DialogPrimitive } from "radix-ui"`.
+
+```tsx
+function Thing({ className, variant = "default", ...props }: React.ComponentProps<"div"> & VariantProps<typeof thingVariants>) {
+  return <div data-slot="thing" className={cn(thingVariants({ variant }), className)} {...props} />
+}
+```
+
+## Styling rules
+
+- **Only use semantic theme tokens** for chrome: `bg-background`, `text-foreground`, `bg-card`, `text-muted-foreground`, `border`, `bg-primary`, `bg-secondary`, `bg-accent`, `destructive`, `ring`. These are oklch CSS vars in `globals.css` and adapt to dark mode automatically. Never hardcode neutral grays for layout/chrome.
+- Raw Tailwind palette colors are allowed **only** for domain data viz: status thresholds (`text-green-600`/`yellow-600`/`red-600`) and class-type tags — and tags must come from `CLASS_TYPE_PALETTE` in `src/lib/class-type-colors.ts`, not ad-hoc.
+- Radii via `rounded-md`/`rounded-lg`/`rounded-xl` (driven by `--radius`). Cards: `rounded-xl border shadow-sm`. Spacing: `space-y-6` page, `gap-4`/`gap-6` within.
+- Focus state: `focus-visible:ring-ring/50 focus-visible:ring-[3px]`. Invalid: `aria-invalid:border-destructive`. Keep these on interactive elements.
+- Icons: lucide-react, sized `h-4 w-4` (or `h-3 w-3` in badges); buttons auto-size SVGs.
+- Mobile-first responsive: stack by default, expand with `sm:`/`lg:` (e.g. `grid gap-4 sm:grid-cols-2 lg:grid-cols-3`). Nav uses `px-4 sm:px-6 lg:px-8`.
+
+## Patterns
+
+- Add `"use client"` only when using hooks/handlers/browser APIs; keep pages/layouts as Server Components otherwise.
+- User feedback via `toast` from `sonner` (Toaster mounted in root layout). Avoid `alert()`.
+- Loading/empty states: centered `text-muted-foreground` message; empty states use a `border border-dashed` panel with a primary CTA.
+- Compose, don't fork: build features from `ui/` primitives + `cn` overrides rather than new bespoke styles.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useScheduling } from "@/lib/context";
 import type { Schedule } from "@/lib/types";
 import { SessionSlotsPanel } from "@/components/session-slots-panel";
+import { AvailabilityResponsePanel } from "@/components/availability-response-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -226,7 +227,7 @@ export default function ScheduleDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { schedules, availability, deleteSchedule, updateSchedule, sessionSlots, loading } = useScheduling();
+  const { staff, schedules, availability, deleteSchedule, updateSchedule, sessionSlots, loading } = useScheduling();
 
   if (loading) {
     return (
@@ -251,7 +252,6 @@ export default function ScheduleDetailPage({
   const totalSessions = schedule.sessions.length;
   let totalRequired = 0;
   let totalAssigned = 0;
-  let totalAvailable = 0;
   let understaffedCount = 0;
 
   for (const session of schedule.sessions) {
@@ -260,12 +260,24 @@ export default function ScheduleDetailPage({
     const assigned = slots.filter((s) => s.assignedStaffId).length;
     totalAssigned += assigned;
 
-    const sessionAvail = availability.filter((a) => a.sessionId === session.id);
-    const available = sessionAvail.filter((a) => a.status === "available").length;
-    totalAvailable += available;
-
     if (assigned < session.requiredStaff) understaffedCount++;
   }
+
+  const scheduleSessionIds = new Set(schedule.sessions.map((s) => s.id));
+  const respondedKeys = new Set(
+    availability
+      .filter((a) => scheduleSessionIds.has(a.sessionId))
+      .map((a) => `${a.staffId}-${a.sessionId}`)
+  );
+  const totalStaff = staff.length;
+  const respondedStaffCount =
+    totalSessions === 0
+      ? 0
+      : staff.filter((member) =>
+          schedule.sessions.every((s) =>
+            respondedKeys.has(`${member.id}-${s.id}`)
+          )
+        ).length;
 
   function handleDelete() {
     deleteSchedule(schedule!.id);
@@ -338,12 +350,17 @@ export default function ScheduleDetailPage({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <Users className="h-3.5 w-3.5 text-blue-600" />
-              Availability Responses
+              Responses Complete
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{totalAvailable}</div>
-            <p className="text-xs text-muted-foreground mt-1">Staff who confirmed available across sessions</p>
+            <div className="text-2xl font-bold text-blue-600">
+              {respondedStaffCount}
+              <span className="text-sm font-normal text-muted-foreground">
+                /{totalStaff}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Staff who submitted availability for every session</p>
           </CardContent>
         </Card>
         <Card>
@@ -366,6 +383,8 @@ export default function ScheduleDetailPage({
       </div>
 
       <SessionSlotsPanel schedule={schedule} />
+
+      <AvailabilityResponsePanel schedule={schedule} />
     </div>
   );
 }
