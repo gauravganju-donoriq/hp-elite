@@ -17,6 +17,9 @@ import type {
   ReportPeriodType,
   ReportScope,
   ReportSummary,
+  ScheduleBoard,
+  BoardScheduledStaff,
+  BoardAvailableStaff,
 } from "./types";
 
 // --------------- Staff ---------------
@@ -444,7 +447,8 @@ function mapAvailRow(row: Record<string, unknown>): Availability {
 
 export async function getSlotsForSession(sessionId: string): Promise<SessionSlot[]> {
   const { rows } = await pool.query(
-    `SELECT id, session_id, slot_index, assigned_staff_id
+    `SELECT id, session_id, slot_index, assigned_staff_id,
+            assigned_start_time, assigned_end_time
      FROM session_slot WHERE session_id = $1 ORDER BY slot_index`,
     [sessionId]
   );
@@ -453,9 +457,126 @@ export async function getSlotsForSession(sessionId: string): Promise<SessionSlot
 
 export async function getAllSlots(): Promise<SessionSlot[]> {
   const { rows } = await pool.query(
-    `SELECT id, session_id, slot_index, assigned_staff_id FROM session_slot ORDER BY session_id, slot_index`
+    `SELECT id, session_id, slot_index, assigned_staff_id,
+            assigned_start_time, assigned_end_time
+     FROM session_slot ORDER BY session_id, slot_index`
   );
   return rows.map(mapSlotRow);
+}
+
+// Composes a read-only schedule "board": every session with its scheduled
+// staff (slot assignments + adjusted worked windows) and its available-but-not-
+// scheduled staff. Names only, safe to expose to non-admin staff.
+export async function getScheduleBoard(
+  scheduleId: string
+): Promise<ScheduleBoard | null> {
+  const schedule = await getScheduleById(scheduleId);
+  if (!schedule) return null;
+
+  const [allStaff, classTypes] = await Promise.all([
+    getAllStaff(),
+    getAllClassTypes(),
+  ]);
+  const staffById = new Map(allStaff.map((s) => [s.id, s]));
+  const displayName = (id: string) => {
+    const m = staffById.get(id);
+    return m ? `${m.firstName} ${m.lastName}`.trim() : "Unknown";
+  };
+
+  const sessionIds = schedule.sessions.map((s) => s.id);
+
+  const scheduledBySession = new Map<string, BoardScheduledStaff[]>();
+  const scheduledStaffBySession = new Map<string, Set<string>>();
+  const availableBySession = new Map<string, BoardAvailableStaff[]>();
+
+  if (sessionIds.length > 0) {
+    const sessionById = new Map(schedule.sessions.map((s) => [s.id, s]));
+
+    const { rows: slotRows } = await pool.query(
+      `SELECT session_id, assigned_staff_id, assigned_start_time, assigned_end_time
+       FROM session_slot
+       WHERE session_id = ANY($1::text[]) AND assigned_staff_id IS NOT NULL`,
+      [sessionIds]
+    );
+    for (const r of slotRows) {
+      const sid = r.session_id as string;
+      const staffId = r.assigned_staff_id as string;
+      const member = staffById.get(staffId);
+      if (!member) continue;
+      const session = sessionById.get(sid);
+      const adjStart = (r.assigned_start_time as string) || undefined;
+      const adjEnd = (r.assigned_end_time as string) || undefined;
+      const list = scheduledBySession.get(sid) ?? [];
+      list.push({
+        staffId,
+        name: displayName(staffId),
+        role: member.role,
+        startTime: adjStart || session?.startTime || "",
+        endTime: adjEnd || session?.endTime || "",
+        adjusted: Boolean(adjStart || adjEnd),
+      });
+      scheduledBySession.set(sid, list);
+      const set = scheduledStaffBySession.get(sid) ?? new Set<string>();
+      set.add(staffId);
+      scheduledStaffBySession.set(sid, set);
+    }
+
+    const { rows: availRows } = await pool.query(
+      `SELECT staff_id, session_id, status, custom_start_time, custom_end_time
+       FROM availability
+       WHERE session_id = ANY($1::text[]) AND status IN ('available', 'maybe')`,
+      [sessionIds]
+    );
+    for (const r of availRows) {
+      const sid = r.session_id as string;
+      const staffId = r.staff_id as string;
+      const member = staffById.get(staffId);
+      if (!member) continue;
+      if (scheduledStaffBySession.get(sid)?.has(staffId)) continue;
+      const list = availableBySession.get(sid) ?? [];
+      list.push({
+        staffId,
+        name: displayName(staffId),
+        role: member.role,
+        status: r.status as "available" | "maybe",
+        customStartTime: (r.custom_start_time as string) || undefined,
+        customEndTime: (r.custom_end_time as string) || undefined,
+      });
+      availableBySession.set(sid, list);
+    }
+  }
+
+  const byRole = (a: { role: StaffRole }, b: { role: StaffRole }) =>
+    ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role];
+
+  return {
+    schedule: {
+      id: schedule.id,
+      name: schedule.name,
+      startDate: schedule.startDate,
+      endDate: schedule.endDate,
+    },
+    classTypes,
+    sessions: schedule.sessions.map((s) => ({
+      id: s.id,
+      date: s.date,
+      dayOfWeek: s.dayOfWeek,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      location: s.location,
+      requiredStaff: s.requiredStaff,
+      classType: s.classType,
+      scheduled: (scheduledBySession.get(s.id) ?? []).sort(
+        (a, b) => byRole(a, b) || a.name.localeCompare(b.name)
+      ),
+      available: (availableBySession.get(s.id) ?? []).sort(
+        (a, b) =>
+          (a.status === b.status ? 0 : a.status === "available" ? -1 : 1) ||
+          byRole(a, b) ||
+          a.name.localeCompare(b.name)
+      ),
+    })),
+  };
 }
 
 export async function setSlotCount(
@@ -511,42 +632,35 @@ export async function isStaffDoubleBooked(
   const session = await getSessionById(sessionId);
   if (!session) return false;
 
-  const { rows: sameDayRows } = await pool.query(
-    `SELECT id, start_time, end_time
-     FROM training_session
-     WHERE date = $1 AND id <> $2`,
-    [session.date, sessionId]
+  // Pull this staff member's existing assignments on the same day, along with
+  // each one's effective worked window (per-assignment override when present,
+  // otherwise the session window).
+  const { rows } = await pool.query(
+    `SELECT ts.start_time AS session_start, ts.end_time AS session_end,
+            ss.assigned_start_time, ss.assigned_end_time
+     FROM session_slot ss
+     JOIN training_session ts ON ts.id = ss.session_id
+     WHERE ts.date = $1 AND ts.id <> $2 AND ss.assigned_staff_id = $3`,
+    [session.date, sessionId, staffId]
   );
 
-  const overlappingSessionIds: string[] = [];
-  for (const r of sameDayRows) {
-    if (
-      timeRangesOverlap(
-        session.startTime,
-        session.endTime,
-        r.start_time as string,
-        r.end_time as string
-      )
-    ) {
-      overlappingSessionIds.push(r.id as string);
+  for (const r of rows) {
+    const start = (r.assigned_start_time as string) || (r.session_start as string);
+    const end = (r.assigned_end_time as string) || (r.session_end as string);
+    if (timeRangesOverlap(session.startTime, session.endTime, start, end)) {
+      return true;
     }
   }
-
-  if (overlappingSessionIds.length === 0) return false;
-
-  const { rows } = await pool.query(
-    `SELECT 1
-     FROM session_slot
-     WHERE session_id = ANY($1::text[]) AND assigned_staff_id = $2
-     LIMIT 1`,
-    [overlappingSessionIds, staffId]
-  );
-  return rows.length > 0;
+  return false;
 }
 
 export async function assignStaffToSlot(slotId: string, staffId: string): Promise<boolean> {
+  // A fresh assignment always covers the full session window; clear any
+  // adjusted times left over from a previous occupant of this slot.
   const { rowCount } = await pool.query(
-    `UPDATE session_slot SET assigned_staff_id = $1 WHERE id = $2`,
+    `UPDATE session_slot
+     SET assigned_staff_id = $1, assigned_start_time = NULL, assigned_end_time = NULL
+     WHERE id = $2`,
     [staffId, slotId]
   );
   return (rowCount ?? 0) > 0;
@@ -554,8 +668,26 @@ export async function assignStaffToSlot(slotId: string, staffId: string): Promis
 
 export async function unassignSlot(slotId: string): Promise<boolean> {
   const { rowCount } = await pool.query(
-    `UPDATE session_slot SET assigned_staff_id = NULL WHERE id = $1`,
+    `UPDATE session_slot
+     SET assigned_staff_id = NULL, assigned_start_time = NULL, assigned_end_time = NULL
+     WHERE id = $1`,
     [slotId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+// Adjusts the worked window for an already-assigned slot. Passing null/undefined
+// for both times resets the slot back to the full session window.
+export async function updateSlotTimes(
+  slotId: string,
+  startTime: string | null,
+  endTime: string | null
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE session_slot
+     SET assigned_start_time = $1, assigned_end_time = $2
+     WHERE id = $3 AND assigned_staff_id IS NOT NULL`,
+    [startTime, endTime, slotId]
   );
   return (rowCount ?? 0) > 0;
 }
@@ -873,6 +1005,8 @@ function mapSlotRow(row: Record<string, unknown>): SessionSlot {
     sessionId: row.session_id as string,
     slotIndex: row.slot_index as number,
     assignedStaffId: (row.assigned_staff_id as string) || undefined,
+    assignedStartTime: (row.assigned_start_time as string) || undefined,
+    assignedEndTime: (row.assigned_end_time as string) || undefined,
   };
 }
 

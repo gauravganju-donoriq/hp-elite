@@ -128,3 +128,14 @@
     @apply bg-background text-foreground min-h-dvh;
   }
 }
+
+/* Keep status/class-type colors when printing the schedule. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

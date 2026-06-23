@@ -17,6 +17,7 @@ export function AdminNavbar() {
 
   const links = [
     { href: "/admin", label: "Schedules" },
+    { href: "/schedule", label: "Schedule View" },
     { href: "/admin/staff", label: "Staff Roster" },
     { href: "/admin/reports", label: "Reports" },
     { href: "/admin/settings", label: "Settings" },

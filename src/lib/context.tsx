@@ -64,6 +64,12 @@ interface SchedulingContextType {
   initializeSlotsForSession: (sessionId: string, count: number) => void;
   assignStaffToSlot: (sessionId: string, slotId: string, staffId: string) => void;
   unassignSlot: (sessionId: string, slotId: string) => void;
+  setSlotTimes: (
+    sessionId: string,
+    slotId: string,
+    startTime: string | null,
+    endTime: string | null
+  ) => void;
   getSlotsForSession: (sessionId: string) => SessionSlot[];
   autoAssignSession: (
     sessionId: string,
@@ -727,6 +733,47 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const setSlotTimes = useCallback(
+    (
+      sessionId: string,
+      slotId: string,
+      startTime: string | null,
+      endTime: string | null
+    ) => {
+      let prev: Pick<SessionSlot, "assignedStartTime" | "assignedEndTime"> | undefined;
+      setSessionSlots((slots) =>
+        slots.map((s) => {
+          if (s.id !== slotId) return s;
+          prev = {
+            assignedStartTime: s.assignedStartTime,
+            assignedEndTime: s.assignedEndTime,
+          };
+          return {
+            ...s,
+            assignedStartTime: startTime ?? undefined,
+            assignedEndTime: endTime ?? undefined,
+          };
+        })
+      );
+      runMutation(
+        () =>
+          apiFetch(`/api/sessions/${sessionId}/slots`, {
+            method: "PATCH",
+            body: JSON.stringify({ slotId, action: "set-times", startTime, endTime }),
+          }),
+        () => {
+          if (!prev) return;
+          const restore = prev;
+          setSessionSlots((slots) =>
+            slots.map((s) => (s.id === slotId ? { ...s, ...restore } : s))
+          );
+        },
+        "Couldn't update worked time. Please retry."
+      );
+    },
+    []
+  );
+
   const getSlotsForSession = useCallback(
     (sessionId: string) => {
       return sessionSlots
@@ -782,6 +829,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         initializeSlotsForSession,
         assignStaffToSlot,
         unassignSlot,
+        setSlotTimes,
         getSlotsForSession,
         autoAssignSession,
       }}

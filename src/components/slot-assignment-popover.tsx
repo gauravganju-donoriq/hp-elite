@@ -10,9 +10,10 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { timeRangesOverlap } from "@/lib/time";
-import { Check, User, X } from "lucide-react";
+import { Check, Clock, User, X } from "lucide-react";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
   lead: "L",
@@ -60,8 +61,12 @@ export function SlotAssignmentPopover({
     sessionSlots,
     assignStaffToSlot,
     unassignSlot,
+    setSlotTimes,
   } = useScheduling();
   const [open, setOpen] = useState(false);
+  const [editTimes, setEditTimes] = useState(false);
+  const [startInput, setStartInput] = useState(slot.assignedStartTime ?? session.startTime);
+  const [endInput, setEndInput] = useState(slot.assignedEndTime ?? session.endTime);
 
   const alreadyAssignedInSession = new Set(
     allSlots
@@ -132,6 +137,22 @@ export function SlotAssignmentPopover({
 
   function handleClear() {
     unassignSlot(session.id, slot.id);
+    setOpen(false);
+  }
+
+  const hasCustomTimes = Boolean(slot.assignedStartTime || slot.assignedEndTime);
+
+  function handleSaveTimes() {
+    setSlotTimes(session.id, slot.id, startInput.trim(), endInput.trim());
+    setEditTimes(false);
+    setOpen(false);
+  }
+
+  function handleResetTimes() {
+    setSlotTimes(session.id, slot.id, null, null);
+    setStartInput(session.startTime);
+    setEndInput(session.endTime);
+    setEditTimes(false);
     setOpen(false);
   }
 
@@ -207,6 +228,82 @@ export function SlotAssignmentPopover({
               </Button>
             )}
           </div>
+          {slot.assignedStaffId && (
+            <div className="px-3 py-2 border-b bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>
+                    Worked: {slot.assignedStartTime ?? session.startTime}–
+                    {slot.assignedEndTime ?? session.endTime}
+                    {hasCustomTimes && (
+                      <span className="ml-1 text-[10px] text-foreground">(adjusted)</span>
+                    )}
+                  </span>
+                </div>
+                {!editTimes && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => {
+                      setStartInput(slot.assignedStartTime ?? session.startTime);
+                      setEndInput(slot.assignedEndTime ?? session.endTime);
+                      setEditTimes(true);
+                    }}
+                  >
+                    Adjust
+                  </Button>
+                )}
+              </div>
+              {editTimes && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    Session window {session.startTime}–{session.endTime}. Set the
+                    actual hours worked for payroll.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={startInput}
+                      onChange={(e) => setStartInput(e.target.value)}
+                      placeholder="9:00 AM"
+                      className="h-7 text-xs"
+                    />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <Input
+                      value={endInput}
+                      onChange={(e) => setEndInput(e.target.value)}
+                      placeholder="12:00 PM"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" className="h-6 text-xs px-2" onClick={handleSaveTimes}>
+                      Save
+                    </Button>
+                    {hasCustomTimes && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                        onClick={handleResetTimes}
+                      >
+                        Reset to full
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      onClick={() => setEditTimes(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="max-h-64 overflow-y-auto">
             {hasNone && (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">

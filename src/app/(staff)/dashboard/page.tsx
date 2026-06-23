@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   Clock,
   MapPin,
@@ -41,7 +42,13 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 export default function StaffDashboardPage() {
   const { identity, userName, loading: identityLoading } = useStaffIdentity();
-  const { staff, schedules, availability, loading: dataLoading } = useScheduling();
+  const {
+    staff,
+    schedules,
+    availability,
+    sessionSlots,
+    loading: dataLoading,
+  } = useScheduling();
 
   if (identityLoading || dataLoading) {
     return (
@@ -68,6 +75,24 @@ export default function StaffDashboardPage() {
     .filter((s) => s.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 10);
+
+  const sessionById = new Map(allSessions.map((s) => [s.id, s]));
+  const mySchedule = identity
+    ? sessionSlots
+        .filter(
+          (sl) =>
+            sl.assignedStaffId === identity.staffId &&
+            sessionById.has(sl.sessionId)
+        )
+        .map((sl) => ({ slot: sl, session: sessionById.get(sl.sessionId)! }))
+        .filter(({ session }) => session.date >= today)
+        .sort(
+          (a, b) =>
+            a.session.date.localeCompare(b.session.date) ||
+            a.session.startTime.localeCompare(b.session.startTime)
+        )
+        .slice(0, 10)
+    : [];
 
   const totalSessions = allSessions.length;
   const respondedCount = myAvailability.length;
@@ -158,6 +183,74 @@ export default function StaffDashboardPage() {
             <Link href="/availability" className="w-full sm:w-auto">
               <Button size="sm" className="w-full sm:w-auto">Update Availability</Button>
             </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {identity && (
+        <Card>
+          <CardHeader className="px-4 sm:px-6">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base sm:text-lg flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-primary" />
+                  My Schedule
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Sessions you&apos;re actually scheduled to work.
+                </CardDescription>
+              </div>
+              <Link href="/schedule">
+                <Button variant="outline" size="sm">
+                  Full schedule
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6">
+            {mySchedule.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                You&apos;re not scheduled for any upcoming sessions yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {mySchedule.map(({ slot, session }) => {
+                  const adjusted = Boolean(
+                    slot.assignedStartTime || slot.assignedEndTime
+                  );
+                  const start = slot.assignedStartTime || session.startTime;
+                  const end = slot.assignedEndTime || session.endTime;
+                  return (
+                    <div
+                      key={slot.id}
+                      className="flex items-center justify-between rounded-lg border px-3 sm:px-4 py-2"
+                    >
+                      <div className="text-sm min-w-0">
+                        <div className="font-medium text-xs sm:text-sm">
+                          {formatDate(session.date)}
+                        </div>
+                        <div className="text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-[11px] sm:text-xs">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {start} - {end}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{session.location}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] sm:text-xs shrink-0 ml-2 border-green-300 text-green-700"
+                      >
+                        {adjusted ? "Partial" : "Scheduled"}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

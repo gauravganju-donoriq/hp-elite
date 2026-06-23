@@ -65,7 +65,12 @@ CREATE TABLE IF NOT EXISTS session_slot (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES training_session(id) ON DELETE CASCADE,
   slot_index INTEGER NOT NULL,
-  assigned_staff_id TEXT REFERENCES staff(id) ON DELETE SET NULL
+  assigned_staff_id TEXT REFERENCES staff(id) ON DELETE SET NULL,
+  -- Optional per-assignment worked window. NULL means the full session window.
+  -- Used for partial shifts (e.g. assigned to a 9a-3p class but only works 9a-12p)
+  -- so payroll/hours reports reflect actual time worked.
+  assigned_start_time TEXT,
+  assigned_end_time TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_slot_session ON session_slot(session_id);

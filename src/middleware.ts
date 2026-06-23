@@ -12,9 +12,12 @@ export async function middleware(request: NextRequest) {
 
   const sessionCookie = getSessionCookie(request);
   const isAuthPage = pathname === "/login" || pathname === "/signup";
+  // /schedule is a shared route: protected (login required) but neither a
+  // staff-only nor admin-only route, so both roles can view it.
   const isProtected =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/availability") ||
+    pathname.startsWith("/schedule") ||
     pathname.startsWith("/admin");
   const isStaffRoute = STAFF_ROUTES.some((r) => pathname.startsWith(r));
   const isAdminRoute = pathname.startsWith("/admin");

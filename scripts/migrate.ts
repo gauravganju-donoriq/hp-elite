@@ -47,6 +47,9 @@ async function migrate() {
     `UPDATE staff SET role = 'trial' WHERE role = 'intern'`,
     `ALTER TABLE staff ADD CONSTRAINT staff_role_check CHECK (role IN ('lead', 'experience', 'junior', 'trial'))`,
     `ALTER TABLE training_session DROP CONSTRAINT IF EXISTS training_session_class_type_fkey`,
+    // Per-assignment worked window for partial shifts / payroll tracking.
+    `ALTER TABLE session_slot ADD COLUMN IF NOT EXISTS assigned_start_time TEXT`,
+    `ALTER TABLE session_slot ADD COLUMN IF NOT EXISTS assigned_end_time TEXT`,
   ];
 
   const postSeedStatements = [

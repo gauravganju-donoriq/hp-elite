@@ -965,12 +965,17 @@ describe("isStaffDoubleBooked", () => {
     mockQuery
       // getSessionById
       .mockResolvedValueOnce({ rows: [sessionRow] })
-      // same-day sessions (excluding this one)
+      // this staff's same-day assignments (effective windows)
       .mockResolvedValueOnce({
-        rows: [{ id: "sess2", start_time: "09:30", end_time: "10:30" }],
-      })
-      // staff already assigned to one of the overlapping sessions
-      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] });
+        rows: [
+          {
+            session_start: "09:30",
+            session_end: "10:30",
+            assigned_start_time: null,
+            assigned_end_time: null,
+          },
+        ],
+      });
 
     const result = await isStaffDoubleBooked("sess1", "s1");
     expect(result).toBe(true);
@@ -981,21 +986,46 @@ describe("isStaffDoubleBooked", () => {
       .mockResolvedValueOnce({ rows: [sessionRow] })
       // 10:00-11:00 touches but does not overlap 09:00-10:00
       .mockResolvedValueOnce({
-        rows: [{ id: "sess2", start_time: "10:00", end_time: "11:00" }],
+        rows: [
+          {
+            session_start: "10:00",
+            session_end: "11:00",
+            assigned_start_time: null,
+            assigned_end_time: null,
+          },
+        ],
       });
 
     const result = await isStaffDoubleBooked("sess1", "s1");
     expect(result).toBe(false);
-    // Should short-circuit before querying session_slot.
+    // getSessionById + one combined assignment query.
     expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it("respects per-assignment adjusted times when checking overlap", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [sessionRow] })
+      // Assigned to a 09:00-11:00 session but only works 10:00-11:00, so it no
+      // longer overlaps the 09:00-10:00 target window.
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            session_start: "09:00",
+            session_end: "11:00",
+            assigned_start_time: "10:00",
+            assigned_end_time: "11:00",
+          },
+        ],
+      });
+
+    const result = await isStaffDoubleBooked("sess1", "s1");
+    expect(result).toBe(false);
   });
 
   it("returns false when overlapping session has no assignment for that staff", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [sessionRow] })
-      .mockResolvedValueOnce({
-        rows: [{ id: "sess2", start_time: "09:30", end_time: "10:30" }],
-      })
+      // No same-day assignments for this staff.
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await isStaffDoubleBooked("sess1", "s1");

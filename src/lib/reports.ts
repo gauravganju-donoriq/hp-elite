@@ -209,7 +209,11 @@ export function computeReport(input: ComputeReportInput): ComputedReport {
     if (!session) continue;
     const bucketIdx = findBucketIndex(buckets, session.date);
     if (bucketIdx < 0) continue;
-    const h = hoursBetween(session.startTime, session.endTime);
+    // Use the per-assignment worked window when set (partial shift), otherwise
+    // fall back to the full session window.
+    const start = slot.assignedStartTime || session.startTime;
+    const end = slot.assignedEndTime || session.endTime;
+    const h = hoursBetween(start, end);
     const arr = hoursByStaff.get(slot.assignedStaffId);
     if (!arr) continue;
     arr[bucketIdx] += h;

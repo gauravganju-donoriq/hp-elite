@@ -54,6 +54,10 @@ export interface SessionSlot {
   sessionId: string;
   slotIndex: number;
   assignedStaffId?: string;
+  // Optional per-assignment worked window (overrides the session window for
+  // payroll/hours). Undefined means the assignment covers the full session.
+  assignedStartTime?: string;
+  assignedEndTime?: string;
 }
 
 export interface AutoAssignConflict {
@@ -116,3 +120,42 @@ export interface Report {
 }
 
 export type ReportSummary = Omit<Report, "payload">;
+
+// --------------- Shared schedule board ---------------
+
+export interface BoardScheduledStaff {
+  staffId: string;
+  name: string;
+  role: StaffRole;
+  startTime: string;
+  endTime: string;
+  adjusted: boolean;
+}
+
+export interface BoardAvailableStaff {
+  staffId: string;
+  name: string;
+  role: StaffRole;
+  status: "available" | "maybe";
+  customStartTime?: string;
+  customEndTime?: string;
+}
+
+export interface BoardSession {
+  id: string;
+  date: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  requiredStaff: number;
+  classType?: string;
+  scheduled: BoardScheduledStaff[];
+  available: BoardAvailableStaff[];
+}
+
+export interface ScheduleBoard {
+  schedule: { id: string; name: string; startDate: string; endDate: string };
+  classTypes: ClassType[];
+  sessions: BoardSession[];
+}

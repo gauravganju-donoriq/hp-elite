@@ -4,7 +4,14 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, LogOut, Menu, X, LayoutDashboard } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarDays,
+  LogOut,
+  Menu,
+  X,
+  LayoutDashboard,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStaffIdentity } from "@/lib/staff-context";
 import { useScheduling } from "@/lib/context";
@@ -76,6 +83,18 @@ export function StaffNavbar() {
               My Availability
             </Link>
           )}
+          <Link
+            href="/schedule"
+            className={cn(
+              "transition-colors hover:text-foreground flex items-center gap-1",
+              pathname === "/schedule"
+                ? "text-foreground font-medium"
+                : "text-muted-foreground"
+            )}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Schedule
+          </Link>
           {displayName && (
             <span className="text-muted-foreground">{displayName}</span>
           )}
@@ -136,6 +155,19 @@ export function StaffNavbar() {
               My Availability
             </Link>
           )}
+          <Link
+            href="/schedule"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+              pathname === "/schedule"
+                ? "bg-accent text-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Schedule
+          </Link>
           <button
             onClick={handleSignOut}
             className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground w-full text-left"
