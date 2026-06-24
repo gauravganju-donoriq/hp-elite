@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   CalendarCheck,
   CalendarDays,
@@ -230,7 +231,12 @@ export default function StaffDashboardPage() {
                           {formatDate(session.date)}
                         </div>
                         <div className="text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-[11px] sm:text-xs">
-                          <span className="flex items-center gap-1">
+                          <span
+                            className={cn(
+                              "flex items-center gap-1",
+                              adjusted && "font-semibold text-amber-700"
+                            )}
+                          >
                             <Clock className="h-3 w-3 shrink-0" />
                             {start} - {end}
                           </span>
@@ -242,7 +248,12 @@ export default function StaffDashboardPage() {
                       </div>
                       <Badge
                         variant="outline"
-                        className="text-[10px] sm:text-xs shrink-0 ml-2 border-green-300 text-green-700"
+                        className={cn(
+                          "text-[10px] sm:text-xs shrink-0 ml-2",
+                          adjusted
+                            ? "border-amber-300 bg-amber-50 text-amber-700"
+                            : "border-green-300 text-green-700"
+                        )}
                       >
                         {adjusted ? "Partial" : "Scheduled"}
                       </Badge>

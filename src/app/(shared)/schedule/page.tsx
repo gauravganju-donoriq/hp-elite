@@ -430,8 +430,9 @@ function SessionCard({
                   <li
                     key={s.staffId}
                     className={cn(
-                      "flex items-center justify-between rounded px-1.5 py-0.5 text-sm",
-                      isMe && "bg-primary/10 font-medium"
+                      "flex items-center justify-between gap-2 rounded px-1.5 py-0.5 text-sm",
+                      isMe && "bg-primary/10 font-medium",
+                      s.adjusted && "bg-amber-50"
                     )}
                   >
                     <span className="truncate">
@@ -441,7 +442,8 @@ function SessionCard({
                       )}
                     </span>
                     {s.adjusted && (
-                      <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">
+                      <span className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                        <Clock className="h-3 w-3 shrink-0" />
                         {s.startTime}–{s.endTime}
                       </span>
                     )}

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { SlotAssignmentPopover } from "@/components/slot-assignment-popover";
 import { getPaletteEntry } from "@/lib/class-type-colors";
 import { dayNameLong, formatDateDisplay } from "@/lib/dates";
-import { parseTimeToMinutes } from "@/lib/time";
+import { formatTimeCompact, parseTimeToMinutes } from "@/lib/time";
 import { buildSessionGrid } from "@/lib/session-grid";
 import {
   Popover,
@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Loader2, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function SlotChip({
@@ -45,19 +45,33 @@ function SlotChip({
     ? staff.find((m) => m.id === slot.assignedStaffId)
     : null;
 
+  const isPartial = Boolean(slot.assignedStartTime || slot.assignedEndTime);
+  const workedStart = slot.assignedStartTime ?? session.startTime;
+  const workedEnd = slot.assignedEndTime ?? session.endTime;
+
   return (
     <SlotAssignmentPopover slot={slot} session={session} allSlots={allSlots}>
       <button
         className={cn(
           "w-full rounded border px-1.5 py-1 text-left text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
           assignedMember
-            ? "bg-green-50 text-green-900 border-green-300 hover:bg-green-100"
+            ? isPartial
+              ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+              : "bg-green-50 text-green-900 border-green-300 hover:bg-green-100"
             : "bg-muted/30 text-muted-foreground border-dashed hover:bg-muted hover:border-solid"
         )}
       >
         {assignedMember ? (
-          <span className="truncate font-semibold">
-            {assignedMember.firstName[0]}. {assignedMember.lastName}
+          <span className="flex flex-col leading-tight">
+            <span className="truncate font-semibold">
+              {assignedMember.firstName[0]}. {assignedMember.lastName}
+            </span>
+            {isPartial && (
+              <span className="flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                {formatTimeCompact(workedStart)}–{formatTimeCompact(workedEnd)}
+              </span>
+            )}
           </span>
         ) : (
           <span className="text-muted-foreground/60">+ assign</span>

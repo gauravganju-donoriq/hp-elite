@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { timeRangesOverlap } from "@/lib/time";
-import { Check, Clock, User, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, User, X } from "lucide-react";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
   lead: "L",
@@ -65,6 +65,7 @@ export function SlotAssignmentPopover({
   } = useScheduling();
   const [open, setOpen] = useState(false);
   const [editTimes, setEditTimes] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
   const [startInput, setStartInput] = useState(slot.assignedStartTime ?? session.startTime);
   const [endInput, setEndInput] = useState(slot.assignedEndTime ?? session.endTime);
 
@@ -110,7 +111,10 @@ export function SlotAssignmentPopover({
     }
   }
 
-  const eligibleStaff = staff
+  // Staff who can be assigned at all: not already in this session and not
+  // double-booked on an overlapping session (a hard constraint that override
+  // does not bypass).
+  const assignableStaff = staff
     .filter((m) => !alreadyAssignedInSession.has(m.id))
     .filter((m) => !doubleBookedStaffIds.has(m.id))
     .map((member) => {
@@ -119,15 +123,20 @@ export function SlotAssignmentPopover({
       );
       const status = avail?.status || "pending";
       return { member, status };
-    })
-    .filter(({ status }) => status === "available" || status === "maybe");
+    });
 
-  const availableStaff = eligibleStaff
+  const availableStaff = assignableStaff
     .filter(({ status }) => status === "available")
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
-  const maybeStaff = eligibleStaff
+  const maybeStaff = assignableStaff
     .filter(({ status }) => status === "maybe")
+    .sort((a, b) => sortByExperience(a, b, assignmentCounts));
+
+  // Staff who haven't marked themselves available/maybe (unavailable, pending,
+  // or no response). An admin can still assign them via the override section.
+  const otherStaff = assignableStaff
+    .filter(({ status }) => status !== "available" && status !== "maybe")
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
   function handleAssign(staffId: string) {
@@ -159,6 +168,15 @@ export function SlotAssignmentPopover({
   const STATUS_BADGE: Record<string, string> = {
     available: "bg-green-100 text-green-800",
     maybe: "bg-yellow-100 text-yellow-800",
+    unavailable: "bg-red-100 text-red-800",
+    pending: "bg-gray-100 text-gray-500",
+  };
+
+  const STATUS_LABEL: Record<string, string> = {
+    available: "Yes",
+    maybe: "Maybe",
+    unavailable: "Unavailable",
+    pending: "No reply",
   };
 
   function renderStaffRow({ member, status }: { member: typeof staff[number]; status: string }) {
@@ -196,7 +214,7 @@ export function SlotAssignmentPopover({
               STATUS_BADGE[status] ?? "bg-gray-100 text-gray-500"
             )}
           >
-            {status === "available" ? "Yes" : "Maybe"}
+            {STATUS_LABEL[status] ?? "No reply"}
           </span>
           {count > 0 && (
             <span className="text-[10px] text-muted-foreground">
@@ -208,7 +226,10 @@ export function SlotAssignmentPopover({
     );
   }
 
-  const hasNone = availableStaff.length === 0 && maybeStaff.length === 0;
+  const hasNone =
+    availableStaff.length === 0 &&
+    maybeStaff.length === 0 &&
+    otherStaff.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -307,8 +328,8 @@ export function SlotAssignmentPopover({
           <div className="max-h-64 overflow-y-auto">
             {hasNone && (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                No eligible staff for this session. Only staff who marked
-                themselves available or maybe are shown.
+                No assignable staff for this session. Everyone is already
+                assigned or double-booked at this time.
               </div>
             )}
             {availableStaff.length > 0 && (
@@ -330,6 +351,34 @@ export function SlotAssignmentPopover({
                 </div>
                 {maybeStaff.map(renderStaffRow)}
               </>
+            )}
+            {otherStaff.length > 0 && (
+              <div className="border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowOverride((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left transition-colors hover:bg-accent"
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                    Schedule anyway ({otherStaff.length})
+                  </span>
+                  {showOverride ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </button>
+                {showOverride && (
+                  <>
+                    <p className="px-3 pb-1.5 text-[10px] leading-snug text-muted-foreground">
+                      These staff haven&apos;t marked themselves available.
+                      Assigning here overrides their availability.
+                    </p>
+                    {otherStaff.map(renderStaffRow)}
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -25,6 +25,18 @@ export function isValidTime(time: string): boolean {
   return !Number.isNaN(parseTimeToMinutes(time));
 }
 
+/** Compact label for tight UI, e.g. "9:00 AM" -> "9a", "9:30 AM" -> "9:30a". */
+export function formatTimeCompact(time: string): string {
+  const total = parseTimeToMinutes(time);
+  if (Number.isNaN(total)) return time;
+  const m = total % 60;
+  const h24 = Math.floor(total / 60);
+  const suffix = h24 >= 12 ? "p" : "a";
+  let h = h24 % 12;
+  if (h === 0) h = 12;
+  return m === 0 ? `${h}${suffix}` : `${h}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
 /** Returns true if [aStart, aEnd) and [bStart, bEnd) overlap. */
 export function timeRangesOverlap(
   aStart: string,
