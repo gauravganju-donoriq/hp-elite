@@ -2,11 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useScheduling } from "@/lib/context";
-import type { Schedule, Session, SessionSlot, AutoAssignConflict, AutoAssignStrategy } from "@/lib/types";
+import type {
+  Schedule,
+  Session,
+  SessionSlot,
+  AutoAssignConflict,
+  AutoAssignProfile,
+} from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { SlotAssignmentPopover } from "@/components/slot-assignment-popover";
 import { getPaletteEntry } from "@/lib/class-type-colors";
-import { dayNameLong, formatDateDisplay } from "@/lib/dates";
+import {
+  addDays,
+  dayNameLong,
+  formatDateDisplay,
+  formatISODate,
+  parseISODate,
+  todayISO,
+} from "@/lib/dates";
 import { formatTimeCompact, parseTimeToMinutes } from "@/lib/time";
 import { buildSessionGrid } from "@/lib/session-grid";
 import {
@@ -23,12 +36,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Clock, Eraser, Loader2, Minus, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function SlotChip({
@@ -82,17 +102,19 @@ function SlotChip({
 }
 
 function AutoAssignPopover({
+  profiles,
   onSelect,
   isLoading,
 }: {
-  onSelect: (strategy: AutoAssignStrategy) => void | Promise<void>;
+  profiles: AutoAssignProfile[];
+  onSelect: (profileId: string) => void | Promise<void>;
   isLoading: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
-  function handlePick(strategy: AutoAssignStrategy) {
+  function handlePick(profileId: string) {
     setOpen(false);
-    void onSelect(strategy);
+    void onSelect(profileId);
   }
 
   if (isLoading) {
@@ -107,28 +129,6 @@ function AutoAssignPopover({
       </div>
     );
   }
-
-  const options: {
-    strategy: AutoAssignStrategy;
-    title: string;
-    description: string;
-  }[] = [
-    {
-      strategy: "cheap",
-      title: "Cheap",
-      description: "Trials, then juniors",
-    },
-    {
-      strategy: "balanced",
-      title: "Balanced",
-      description: "1 lead, 1 experience, rest juniors",
-    },
-    {
-      strategy: "expensive",
-      title: "Expensive",
-      description: "1 lead, 2 experience, rest trials then juniors",
-    },
-  ];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -146,21 +146,23 @@ function AutoAssignPopover({
         <div className="px-2 py-1.5">
           <p className="text-xs font-semibold">Auto-assign</p>
           <p className="text-[10px] text-muted-foreground">
-            Choose how to fill empty slots.
+            Fill empty slots using a profile.
           </p>
         </div>
-        <div className="flex flex-col gap-1">
-          {options.map((opt) => (
+        <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+          {profiles.length === 0 && (
+            <p className="px-2 py-2 text-[10px] text-muted-foreground italic">
+              No profiles yet. Create one in Settings.
+            </p>
+          )}
+          {profiles.map((profile) => (
             <button
-              key={opt.strategy}
+              key={profile.id}
               type="button"
-              onClick={() => handlePick(opt.strategy)}
+              onClick={() => handlePick(profile.id)}
               className="w-full rounded px-2 py-1.5 text-left hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <div className="text-xs font-medium">{opt.title}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {opt.description}
-              </div>
+              <div className="text-xs font-medium">{profile.name}</div>
             </button>
           ))}
         </div>
@@ -178,8 +180,13 @@ function SessionConfigPopover({
   schedule: Schedule;
   children: React.ReactNode;
 }) {
-  const { updateSession, removeSession, initializeSlotsForSession, classTypes } =
-    useScheduling();
+  const {
+    updateSession,
+    removeSession,
+    initializeSlotsForSession,
+    clearAssignmentsForSessions,
+    classTypes,
+  } = useScheduling();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [staffCount, setStaffCount] = useState(session.requiredStaff);
@@ -237,6 +244,16 @@ function SessionConfigPopover({
     removeSession(schedule.id, session.id);
     toast.success("Session deleted.");
     setOpen(false);
+  }
+
+  async function handleClearAssignments() {
+    try {
+      await clearAssignmentsForSessions([session.id]);
+      toast.success("Assignments cleared for this session.");
+      setOpen(false);
+    } catch {
+      // error toast handled in context
+    }
   }
 
   return (
@@ -363,6 +380,16 @@ function SessionConfigPopover({
           </div>
 
           <Separator />
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-7 text-xs"
+            onClick={handleClearAssignments}
+          >
+            <Eraser className="h-3 w-3 mr-1" />
+            Clear Assignments
+          </Button>
 
           <Button
             variant="destructive"
@@ -569,13 +596,24 @@ function ConflictResolutionDialog({
   );
 }
 
+type ViewMode = "day" | "week";
+
+function clampToRange(iso: string, start: string, end: string): string {
+  if (iso < start) return start;
+  if (iso > end) return end;
+  return iso;
+}
+
 export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
   const {
     autoAssignSession,
+    autoAssignSessions,
+    clearAssignmentsForSessions,
     getSlotsForSession,
     initializeSlotsForSession,
     sessionSlots,
     classTypes,
+    autoAssignProfiles,
   } = useScheduling();
 
   const [conflicts, setConflicts] = useState<AutoAssignConflict[]>([]);
@@ -584,7 +622,45 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     Set<string>
   >(new Set());
 
-  const sessions = useMemo(
+  const [view, setView] = useState<ViewMode>("day");
+  const [anchor, setAnchor] = useState<string>(() => {
+    const clampedToday = clampToRange(
+      todayISO(),
+      schedule.startDate,
+      schedule.endDate
+    );
+    const sessionDates = schedule.sessions.map((s) => s.date);
+    // Prefer today when it has sessions; otherwise land on the nearest upcoming
+    // session date (or the last one if all are in the past).
+    if (sessionDates.includes(clampedToday)) return clampedToday;
+    const sorted = [...sessionDates].sort();
+    const upcoming = sorted.find((d) => d >= clampedToday);
+    return upcoming ?? sorted[sorted.length - 1] ?? clampedToday;
+  });
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [scopeBusy, setScopeBusy] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+
+  const sortedProfiles = useMemo(
+    () =>
+      [...autoAssignProfiles].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+      ),
+    [autoAssignProfiles]
+  );
+
+  // Keep a valid profile selected as profiles load/change.
+  useEffect(() => {
+    if (sortedProfiles.length === 0) {
+      if (selectedProfileId !== "") setSelectedProfileId("");
+      return;
+    }
+    if (!sortedProfiles.some((p) => p.id === selectedProfileId)) {
+      setSelectedProfileId(sortedProfiles[0].id);
+    }
+  }, [sortedProfiles, selectedProfileId]);
+
+  const allSessions = useMemo(
     () =>
       [...schedule.sessions].sort(
         (a, b) =>
@@ -594,10 +670,34 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     [schedule.sessions]
   );
 
+  // The dates currently in scope, driven by the day/week view + anchor.
+  const visibleDates = useMemo(() => {
+    if (view === "day") return [anchor];
+    const start = parseISODate(anchor);
+    const weekStart = addDays(start, -start.getUTCDay());
+    return Array.from({ length: 7 }, (_, i) =>
+      formatISODate(addDays(weekStart, i))
+    );
+  }, [view, anchor]);
+
+  const visibleDateSet = useMemo(() => new Set(visibleDates), [visibleDates]);
+
+  // Sessions limited to the current view scope; everything below renders from
+  // this so the grid only shows the selected day or week.
+  const sessions = useMemo(
+    () => allSessions.filter((s) => visibleDateSet.has(s.date)),
+    [allSessions, visibleDateSet]
+  );
+
+  const scopedSessionIds = useMemo(
+    () => sessions.map((s) => s.id),
+    [sessions]
+  );
+
   const reconciledRef = useRef(new Set<string>());
 
   useEffect(() => {
-    for (const session of sessions) {
+    for (const session of allSessions) {
       if (session.requiredStaff <= 0) continue;
       const slots = getSlotsForSession(session.id);
       if (slots.length === session.requiredStaff) continue;
@@ -609,7 +709,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
       reconciledRef.current.add(key);
       initializeSlotsForSession(session.id, session.requiredStaff);
     }
-  }, [sessions, getSlotsForSession, initializeSlotsForSession]);
+  }, [allSessions, getSlotsForSession, initializeSlotsForSession]);
 
   const slotsBySession = useMemo(() => {
     const map = new Map<string, SessionSlot[]>();
@@ -643,20 +743,8 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
   const sessionGrid = useMemo(() => buildSessionGrid(sessions), [sessions]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const SCROLL_AMOUNT = 450;
 
-  const scrollLeft = useCallback(() => {
-    scrollRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: "smooth" });
-  }, []);
-
-  const scrollRight = useCallback(() => {
-    scrollRef.current?.scrollBy({ left: SCROLL_AMOUNT, behavior: "smooth" });
-  }, []);
-
-  async function handleAutoAssignSession(
-    session: Session,
-    strategy: AutoAssignStrategy
-  ) {
+  async function handleAutoAssignSession(session: Session, profileId: string) {
     if (autoAssigningSessionIds.has(session.id)) return;
     setAutoAssigningSessionIds((prev) => {
       const next = new Set(prev);
@@ -664,7 +752,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
       return next;
     });
     try {
-      const result = await autoAssignSession(session.id, strategy);
+      const result = await autoAssignSession(session.id, profileId);
       if (result.assigned > 0 && result.conflicts.length === 0) {
         toast.success(
           `Assigned ${result.assigned} staff to this session.`
@@ -690,25 +778,166 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
     }
   }
 
+  const viewLabel = view === "day" ? "day" : "week";
+
+  const shift = useCallback(
+    (dir: 1 | -1) => {
+      const step = view === "day" ? 1 : 7;
+      setAnchor((prev) =>
+        formatISODate(addDays(parseISODate(prev), dir * step))
+      );
+    },
+    [view]
+  );
+
+  const goToday = useCallback(() => {
+    setAnchor(clampToRange(todayISO(), schedule.startDate, schedule.endDate));
+  }, [schedule.startDate, schedule.endDate]);
+
+  async function handleAutoAssignScope() {
+    if (scopeBusy) return;
+    if (!selectedProfileId) {
+      toast.error("Create an auto-assign profile in Settings first.");
+      return;
+    }
+    if (scopedSessionIds.length === 0) {
+      toast.info(`No sessions in this ${viewLabel}.`);
+      return;
+    }
+    setScopeBusy(true);
+    try {
+      const result = await autoAssignSessions(
+        schedule.id,
+        scopedSessionIds,
+        selectedProfileId,
+        false
+      );
+      if (result.assigned > 0) {
+        toast.success(`Assigned ${result.assigned} staff across this ${viewLabel}.`);
+      } else if (result.conflicts.length === 0) {
+        toast.info("No additional staff could be auto-assigned.");
+      }
+      if (result.conflicts.length > 0) {
+        setConflicts(result.conflicts);
+        setConflictDialogOpen(true);
+      }
+    } catch {
+      toast.error("Auto-assign failed.");
+    } finally {
+      setScopeBusy(false);
+    }
+  }
+
+  async function handleClearScope() {
+    if (scopeBusy) return;
+    setClearDialogOpen(false);
+    if (scopedSessionIds.length === 0) {
+      toast.info(`No sessions in this ${viewLabel}.`);
+      return;
+    }
+    setScopeBusy(true);
+    try {
+      await clearAssignmentsForSessions(scopedSessionIds);
+      toast.success(`Cleared all assignments for this ${viewLabel}.`);
+    } catch {
+      // error toast handled in context
+    } finally {
+      setScopeBusy(false);
+    }
+  }
+
+  const rangeLabel =
+    view === "day"
+      ? formatDateDisplay(anchor).fullLong
+      : `${formatDateDisplay(visibleDates[0]).shortLong} – ${formatDateDisplay(visibleDates[visibleDates.length - 1]).shortLong}`;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xl font-semibold">Staff Assignments</h2>
+      <div className="flex flex-col gap-3 mb-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          {dates.length >= 10 && (
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={scrollLeft}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={scrollRight}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <h2 className="text-xl font-semibold">Staff Assignments</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5">
+            {(["day", "week"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={cn(
+                  "rounded px-3 py-1 text-sm capitalize transition-colors",
+                  view === v
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shift(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToday}>
+              Today
+            </Button>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shift(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <AddSessionDialog schedule={schedule} />
         </div>
       </div>
 
+      <div className="flex flex-col gap-3 mb-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-medium">{rangeLabel}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={selectedProfileId}
+            onValueChange={setSelectedProfileId}
+            disabled={sortedProfiles.length === 0}
+          >
+            <SelectTrigger className="h-8 w-[180px]">
+              <SelectValue placeholder="Select a profile" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedProfiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            onClick={handleAutoAssignScope}
+            disabled={scopeBusy || sortedProfiles.length === 0 || scopedSessionIds.length === 0}
+          >
+            {scopeBusy ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-1" />
+            )}
+            Auto-assign {viewLabel}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setClearDialogOpen(true)}
+            disabled={scopeBusy || scopedSessionIds.length === 0}
+          >
+            <Eraser className="h-4 w-4 mr-1" />
+            Clear {viewLabel}
+          </Button>
+        </div>
+      </div>
+
+      {dates.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
+          No sessions in this {viewLabel}. Use the navigation above or add a
+          session.
+        </div>
+      ) : (
       <div ref={scrollRef} className="overflow-x-auto rounded-lg border">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -832,9 +1061,10 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                                   </button>
                                 </SessionConfigPopover>
                                 <AutoAssignPopover
+                                  profiles={sortedProfiles}
                                   isLoading={autoAssigningSessionIds.has(session.id)}
-                                  onSelect={(strategy) =>
-                                    handleAutoAssignSession(session, strategy)
+                                  onSelect={(profileId) =>
+                                    handleAutoAssignSession(session, profileId)
                                   }
                                 />
                               </div>
@@ -860,12 +1090,37 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           </tbody>
         </table>
       </div>
+      )}
 
       <ConflictResolutionDialog
         conflicts={conflicts}
         open={conflictDialogOpen}
         onOpenChange={setConflictDialogOpen}
       />
+
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Clear this {viewLabel}?
+            </DialogTitle>
+            <DialogDescription>
+              This removes <strong>all</strong> staff assignments (including any
+              you set manually) from every session in this {viewLabel}. You can
+              re-assign afterwards with any profile.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleClearScope}>
+              Clear {viewLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

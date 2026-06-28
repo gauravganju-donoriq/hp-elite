@@ -38,6 +38,65 @@ async function migrate() {
     { id: "general", label: "General", colorKey: "gray", sortOrder: 160 },
   ];
 
+  // Built-in auto-assign profiles. These mirror the original hardcoded
+  // STRATEGY_PLAN so the picker has sensible defaults; admins can edit, add,
+  // or remove them from Settings.
+  const autoAssignProfileSeeds: Array<{
+    id: string;
+    name: string;
+    plan: Array<{ roles: string[]; max?: number; preferSeniorFirst: boolean }>;
+    sortOrder: number;
+  }> = [
+    {
+      id: "cheap",
+      name: "Cheap",
+      sortOrder: 10,
+      plan: [
+        { roles: ["trial"], preferSeniorFirst: false },
+        { roles: ["junior"], preferSeniorFirst: false },
+        { roles: ["experience"], preferSeniorFirst: false },
+        { roles: ["lead"], preferSeniorFirst: false },
+      ],
+    },
+    {
+      id: "balanced",
+      name: "Balanced",
+      sortOrder: 20,
+      plan: [
+        { roles: ["lead"], max: 1, preferSeniorFirst: true },
+        { roles: ["experience"], max: 1, preferSeniorFirst: true },
+        { roles: ["junior"], preferSeniorFirst: true },
+        { roles: ["trial"], preferSeniorFirst: true },
+        { roles: ["experience"], preferSeniorFirst: true },
+        { roles: ["lead"], preferSeniorFirst: true },
+      ],
+    },
+    {
+      id: "expensive",
+      name: "Expensive",
+      sortOrder: 30,
+      plan: [
+        { roles: ["lead"], max: 1, preferSeniorFirst: true },
+        { roles: ["experience"], max: 2, preferSeniorFirst: true },
+        { roles: ["trial"], preferSeniorFirst: false },
+        { roles: ["junior"], preferSeniorFirst: true },
+        { roles: ["experience"], preferSeniorFirst: true },
+        { roles: ["lead"], preferSeniorFirst: true },
+      ],
+    },
+    {
+      id: "most-experienced",
+      name: "Most Experienced",
+      sortOrder: 40,
+      plan: [
+        {
+          roles: ["lead", "experience", "junior", "trial"],
+          preferSeniorFirst: true,
+        },
+      ],
+    },
+  ];
+
   const alterStatements = [
     `ALTER TABLE staff ADD COLUMN IF NOT EXISTS years_experience INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE staff DROP CONSTRAINT IF EXISTS staff_role_check`,
@@ -102,6 +161,14 @@ async function migrate() {
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (id) DO NOTHING`,
         [seed.id, seed.label, seed.colorKey, seed.sortOrder]
+      );
+    }
+    for (const seed of autoAssignProfileSeeds) {
+      await pool.query(
+        `INSERT INTO auto_assign_profile (id, name, plan, sort_order, is_builtin)
+         VALUES ($1, $2, $3, $4, TRUE)
+         ON CONFLICT (id) DO NOTHING`,
+        [seed.id, seed.name, JSON.stringify(seed.plan), seed.sortOrder]
       );
     }
     for (const stmt of postSeedStatements) {

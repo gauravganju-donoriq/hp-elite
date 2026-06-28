@@ -19,7 +19,7 @@ import type {
   AvailabilityStatus,
   SessionSlot,
   AutoAssignResult,
-  AutoAssignStrategy,
+  AutoAssignProfile,
   ClassType,
 } from "./types";
 
@@ -29,6 +29,7 @@ interface SchedulingContextType {
   availability: Availability[];
   sessionSlots: SessionSlot[];
   classTypes: ClassType[];
+  autoAssignProfiles: AutoAssignProfile[];
   loading: boolean;
   refreshAll: () => Promise<void>;
 
@@ -39,6 +40,15 @@ interface SchedulingContextType {
   addClassType: (c: ClassType) => Promise<ClassType>;
   updateClassType: (id: string, updates: Partial<Omit<ClassType, "id">>) => void;
   removeClassType: (id: string) => void;
+
+  addAutoAssignProfile: (
+    p: Omit<AutoAssignProfile, "isBuiltin">
+  ) => Promise<AutoAssignProfile>;
+  updateAutoAssignProfile: (
+    id: string,
+    updates: Partial<Pick<AutoAssignProfile, "name" | "plan" | "sortOrder">>
+  ) => void;
+  removeAutoAssignProfile: (id: string) => void;
 
   addSchedule: (s: Schedule) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
@@ -73,8 +83,15 @@ interface SchedulingContextType {
   getSlotsForSession: (sessionId: string) => SessionSlot[];
   autoAssignSession: (
     sessionId: string,
-    strategy?: AutoAssignStrategy
+    profileId: string
   ) => Promise<AutoAssignResult>;
+  autoAssignSessions: (
+    scheduleId: string,
+    sessionIds: string[],
+    profileId: string,
+    clearFirst?: boolean
+  ) => Promise<AutoAssignResult>;
+  clearAssignmentsForSessions: (sessionIds: string[]) => Promise<void>;
 }
 
 const SchedulingContext = createContext<SchedulingContextType | null>(null);
@@ -116,6 +133,9 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   const [availability, setAvailability] = useState<Availability[]>([]);
   const [sessionSlots, setSessionSlots] = useState<SessionSlot[]>([]);
   const [classTypes, setClassTypes] = useState<ClassType[]>([]);
+  const [autoAssignProfiles, setAutoAssignProfiles] = useState<
+    AutoAssignProfile[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -125,18 +145,27 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [staffData, schedData, availData, slotsData, classTypeData] = await Promise.all([
+      const [
+        staffData,
+        schedData,
+        availData,
+        slotsData,
+        classTypeData,
+        profilesData,
+      ] = await Promise.all([
         apiFetch<Staff[]>("/api/staff"),
         apiFetch<Schedule[]>("/api/schedules"),
         apiFetch<Availability[]>("/api/availability"),
         apiFetch<SessionSlot[]>("/api/slots"),
         apiFetch<ClassType[]>("/api/class-types"),
+        apiFetch<AutoAssignProfile[]>("/api/auto-assign-profiles"),
       ]);
       setStaff(staffData);
       setSchedules(schedData);
       setAvailability(availData);
       setSessionSlots(slotsData);
       setClassTypes(classTypeData);
+      setAutoAssignProfiles(profilesData);
     } catch {
       // If API fails (e.g. not authenticated), leave empty arrays
     } finally {
@@ -159,6 +188,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
       setAvailability([]);
       setSessionSlots([]);
       setClassTypes([]);
+      setAutoAssignProfiles([]);
       setLoading(false);
     }
   }, [userId, sessionPending, refreshAll]);
@@ -304,6 +334,89 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         setSchedules(prevSchedules);
       },
       "Couldn't remove class type. Please retry."
+    );
+  }, []);
+
+  // --------------- Auto-Assign Profiles ---------------
+
+  const addAutoAssignProfileFn = useCallback(
+    async (
+      p: Omit<AutoAssignProfile, "isBuiltin">
+    ): Promise<AutoAssignProfile> => {
+      try {
+        const created = await apiFetch<AutoAssignProfile>(
+          "/api/auto-assign-profiles",
+          { method: "POST", body: JSON.stringify(p) }
+        );
+        setAutoAssignProfiles((prev) =>
+          [...prev, created].sort(
+            (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+          )
+        );
+        return created;
+      } catch (err) {
+        toast.error("Couldn't create profile. Please retry.");
+        throw err;
+      }
+    },
+    []
+  );
+
+  const updateAutoAssignProfileFn = useCallback(
+    (
+      id: string,
+      updates: Partial<Pick<AutoAssignProfile, "name" | "plan" | "sortOrder">>
+    ) => {
+      let prevEntry: AutoAssignProfile | undefined;
+      setAutoAssignProfiles((prev) => {
+        prevEntry = prev.find((p) => p.id === id);
+        return prev
+          .map((p) => (p.id === id ? { ...p, ...updates } : p))
+          .sort(
+            (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+          );
+      });
+      runMutation(
+        () =>
+          apiFetch(`/api/auto-assign-profiles/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(updates),
+          }),
+        () => {
+          if (!prevEntry) return;
+          setAutoAssignProfiles((prev) =>
+            prev
+              .map((p) => (p.id === id ? prevEntry! : p))
+              .sort(
+                (a, b) =>
+                  a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+              )
+          );
+        },
+        "Couldn't update profile. Please retry."
+      );
+    },
+    []
+  );
+
+  const removeAutoAssignProfileFn = useCallback((id: string) => {
+    let removed: AutoAssignProfile | undefined;
+    setAutoAssignProfiles((prev) => {
+      removed = prev.find((p) => p.id === id);
+      return prev.filter((p) => p.id !== id);
+    });
+    runMutation(
+      () => apiFetch(`/api/auto-assign-profiles/${id}`, { method: "DELETE" }),
+      () => {
+        if (removed) {
+          setAutoAssignProfiles((prev) =>
+            [...prev, removed!].sort(
+              (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+            )
+          );
+        }
+      },
+      "Couldn't remove profile. Please retry."
     );
   }, []);
 
@@ -784,17 +897,67 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   );
 
   const autoAssignSession = useCallback(
-    async (
-      sessionId: string,
-      strategy: AutoAssignStrategy = "balanced"
-    ): Promise<AutoAssignResult> => {
+    async (sessionId: string, profileId: string): Promise<AutoAssignResult> => {
       const result = await apiFetch<AutoAssignResult>(
         `/api/sessions/${sessionId}/auto-assign`,
-        { method: "POST", body: JSON.stringify({ strategy }) }
+        { method: "POST", body: JSON.stringify({ profileId }) }
       );
       const slotsData = await apiFetch<SessionSlot[]>("/api/slots");
       setSessionSlots(slotsData);
       return result;
+    },
+    []
+  );
+
+  const autoAssignSessions = useCallback(
+    async (
+      scheduleId: string,
+      sessionIds: string[],
+      profileId: string,
+      clearFirst = false
+    ): Promise<AutoAssignResult> => {
+      const result = await apiFetch<AutoAssignResult>(
+        `/api/schedules/${scheduleId}/auto-assign`,
+        {
+          method: "POST",
+          body: JSON.stringify({ sessionIds, profileId, clearFirst }),
+        }
+      );
+      const slotsData = await apiFetch<SessionSlot[]>("/api/slots");
+      setSessionSlots(slotsData);
+      return result;
+    },
+    []
+  );
+
+  const clearAssignmentsForSessionsFn = useCallback(
+    async (sessionIds: string[]): Promise<void> => {
+      if (sessionIds.length === 0) return;
+      const ids = new Set(sessionIds);
+      let snapshot: SessionSlot[] = [];
+      setSessionSlots((prev) => {
+        snapshot = prev;
+        return prev.map((s) =>
+          ids.has(s.sessionId)
+            ? {
+                ...s,
+                assignedStaffId: undefined,
+                assignedStartTime: undefined,
+                assignedEndTime: undefined,
+              }
+            : s
+        );
+      });
+      try {
+        await apiFetch("/api/slots/clear", {
+          method: "POST",
+          body: JSON.stringify({ sessionIds }),
+        });
+      } catch (err) {
+        setSessionSlots(snapshot);
+        toast.error("Couldn't clear assignments. Please retry.");
+        throw err;
+      }
     },
     []
   );
@@ -807,6 +970,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         availability,
         sessionSlots,
         classTypes,
+        autoAssignProfiles,
         loading,
         refreshAll,
         addStaff,
@@ -815,6 +979,9 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         addClassType: addClassTypeFn,
         updateClassType: updateClassTypeFn,
         removeClassType: removeClassTypeFn,
+        addAutoAssignProfile: addAutoAssignProfileFn,
+        updateAutoAssignProfile: updateAutoAssignProfileFn,
+        removeAutoAssignProfile: removeAutoAssignProfileFn,
         addSchedule,
         updateSchedule: updateScheduleFn,
         deleteSchedule: deleteScheduleFn,
@@ -832,6 +999,8 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         setSlotTimes,
         getSlotsForSession,
         autoAssignSession,
+        autoAssignSessions,
+        clearAssignmentsForSessions: clearAssignmentsForSessionsFn,
       }}
     >
       {children}

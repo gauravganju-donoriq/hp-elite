@@ -14,6 +14,8 @@ const {
   mockUpdateSession,
   mockDeleteSession,
   mockAutoAssignSession,
+  mockGetAutoAssignProfile,
+  mockClearAssignmentsForSessions,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetAllSchedules: vi.fn(),
@@ -27,6 +29,8 @@ const {
   mockUpdateSession: vi.fn(),
   mockDeleteSession: vi.fn(),
   mockAutoAssignSession: vi.fn(),
+  mockGetAutoAssignProfile: vi.fn(),
+  mockClearAssignmentsForSessions: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -48,6 +52,8 @@ vi.mock("@/lib/queries", () => ({
   updateSession: mockUpdateSession,
   deleteSession: mockDeleteSession,
   autoAssignSession: mockAutoAssignSession,
+  getAutoAssignProfile: mockGetAutoAssignProfile,
+  clearAssignmentsForSessions: mockClearAssignmentsForSessions,
 }));
 
 import { GET as listSchedules, POST as createScheduleRoute } from "@/app/api/schedules/route";
@@ -55,6 +61,7 @@ import { GET as getSchedule, PATCH as patchSchedule, DELETE as deleteScheduleRou
 import { GET as listSessions, POST as createSessionsRoute } from "@/app/api/schedules/[id]/sessions/route";
 import { GET as getSession, PATCH as patchSession, DELETE as deleteSessionRoute } from "@/app/api/sessions/[id]/route";
 import { POST as autoAssignSessionRoute } from "@/app/api/sessions/[id]/auto-assign/route";
+import { POST as batchAutoAssignRoute } from "@/app/api/schedules/[id]/auto-assign/route";
 
 const adminSession = { user: { id: "u1", role: "admin" } };
 const staffSession = { user: { id: "u2", role: "user" } };
@@ -306,6 +313,7 @@ describe("POST /api/schedules/[id]/sessions", () => {
 
   it("creates sessions and returns 201", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockGetScheduleById.mockResolvedValueOnce(sampleSchedule);
     mockCreateSessions.mockResolvedValueOnce(undefined);
     const req = makeRequest("/api/schedules/sch1/sessions", {
       method: "POST",
@@ -437,5 +445,98 @@ describe("POST /api/sessions/[id]/auto-assign", () => {
     const body = await res.json();
     expect(body.assigned).toBe(2);
     expect(mockAutoAssignSession).toHaveBeenCalledWith("sess1", "balanced");
+  });
+
+  it("uses a profile's plan when profileId is provided", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    const plan = [{ roles: ["lead"], preferSeniorFirst: true }];
+    mockGetAutoAssignProfile.mockResolvedValueOnce({
+      id: "p1",
+      name: "P1",
+      plan,
+      sortOrder: 0,
+    });
+    mockAutoAssignSession.mockResolvedValueOnce({ assigned: 1, empty: 0, conflicts: [] });
+    const req = makeRequest("/api/sessions/sess1/auto-assign", {
+      method: "POST",
+      body: JSON.stringify({ profileId: "p1" }),
+    });
+    const res = await autoAssignSessionRoute(req, makeParams("sess1"));
+    expect(res.status).toBe(200);
+    expect(mockAutoAssignSession).toHaveBeenCalledWith("sess1", plan);
+  });
+
+  it("returns 404 when the profileId is unknown", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    mockGetAutoAssignProfile.mockResolvedValueOnce(null);
+    const req = makeRequest("/api/sessions/sess1/auto-assign", {
+      method: "POST",
+      body: JSON.stringify({ profileId: "nope" }),
+    });
+    const res = await autoAssignSessionRoute(req, makeParams("sess1"));
+    expect(res.status).toBe(404);
+  });
+});
+
+// ============ POST /api/schedules/[id]/auto-assign (batch) ============
+
+describe("POST /api/schedules/[id]/auto-assign", () => {
+  const scheduleWithSessions = {
+    ...sampleSchedule,
+    sessions: [
+      { ...sampleSession, id: "sess1" },
+      { ...sampleSession, id: "sess2" },
+    ],
+  };
+
+  it("returns 403 for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(staffSession);
+    const req = makeRequest("/api/schedules/sch1/auto-assign", {
+      method: "POST",
+      body: JSON.stringify({ profileId: "p1", sessionIds: ["sess1"] }),
+    });
+    const res = await batchAutoAssignRoute(req, makeParams("sch1"));
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 400 when profileId is missing", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    const req = makeRequest("/api/schedules/sch1/auto-assign", {
+      method: "POST",
+      body: JSON.stringify({ sessionIds: ["sess1"] }),
+    });
+    const res = await batchAutoAssignRoute(req, makeParams("sch1"));
+    expect(res.status).toBe(400);
+  });
+
+  it("clears first then auto-assigns each in-scope session and aggregates", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    mockGetAutoAssignProfile.mockResolvedValueOnce({
+      id: "p1",
+      name: "P1",
+      plan: [{ roles: ["lead"], preferSeniorFirst: true }],
+      sortOrder: 0,
+    });
+    mockGetScheduleById.mockResolvedValueOnce(scheduleWithSessions);
+    mockClearAssignmentsForSessions.mockResolvedValueOnce(0);
+    mockAutoAssignSession
+      .mockResolvedValueOnce({ assigned: 2, empty: 0, conflicts: [] })
+      .mockResolvedValueOnce({ assigned: 1, empty: 1, conflicts: [] });
+
+    const req = makeRequest("/api/schedules/sch1/auto-assign", {
+      method: "POST",
+      body: JSON.stringify({
+        profileId: "p1",
+        sessionIds: ["sess1", "sess2"],
+        clearFirst: true,
+      }),
+    });
+    const res = await batchAutoAssignRoute(req, makeParams("sch1"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.assigned).toBe(3);
+    expect(body.empty).toBe(1);
+    expect(mockClearAssignmentsForSessions).toHaveBeenCalledWith(["sess1", "sess2"]);
+    expect(mockAutoAssignSession).toHaveBeenCalledTimes(2);
   });
 });

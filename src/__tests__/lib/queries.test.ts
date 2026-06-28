@@ -44,8 +44,14 @@ import {
   initializeSlotsForSession,
   assignStaffToSlot,
   unassignSlot,
+  clearAssignmentsForSessions,
   autoAssignSession,
   isStaffDoubleBooked,
+  getAllAutoAssignProfiles,
+  getAutoAssignProfile,
+  createAutoAssignProfile,
+  updateAutoAssignProfile,
+  deleteAutoAssignProfile,
 } from "@/lib/queries";
 
 // --------------- Fixtures ---------------
@@ -604,6 +610,122 @@ describe("unassignSlot", () => {
   it("returns false when slot not found", async () => {
     mockQuery.mockResolvedValueOnce({ rowCount: 0 });
     expect(await unassignSlot("missing")).toBe(false);
+  });
+});
+
+describe("clearAssignmentsForSessions", () => {
+  it("returns 0 and does not query for an empty list", async () => {
+    const cleared = await clearAssignmentsForSessions([]);
+    expect(cleared).toBe(0);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("clears assignments for the given sessions", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 3 });
+    const cleared = await clearAssignmentsForSessions(["sess1", "sess2"]);
+    expect(cleared).toBe(3);
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain("UPDATE session_slot");
+    expect(sql).toContain("assigned_staff_id = NULL");
+    expect(params).toEqual([["sess1", "sess2"]]);
+  });
+});
+
+describe("auto-assign profiles", () => {
+  const profileRow = {
+    id: "most-experienced",
+    name: "Most Experienced",
+    plan: [{ roles: ["lead", "experience"], preferSeniorFirst: true }],
+    sort_order: 40,
+    is_builtin: true,
+  };
+
+  it("getAllAutoAssignProfiles maps rows", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [profileRow] });
+    const profiles = await getAllAutoAssignProfiles();
+    expect(profiles).toEqual([
+      {
+        id: "most-experienced",
+        name: "Most Experienced",
+        plan: [{ roles: ["lead", "experience"], preferSeniorFirst: true }],
+        sortOrder: 40,
+        isBuiltin: true,
+      },
+    ]);
+  });
+
+  it("getAutoAssignProfile parses a JSON string plan", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ ...profileRow, plan: JSON.stringify(profileRow.plan) }],
+    });
+    const profile = await getAutoAssignProfile("most-experienced");
+    expect(profile?.plan).toEqual([
+      { roles: ["lead", "experience"], preferSeniorFirst: true },
+    ]);
+  });
+
+  it("getAutoAssignProfile returns null when missing", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    expect(await getAutoAssignProfile("nope")).toBeNull();
+  });
+
+  it("createAutoAssignProfile serializes the plan", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [profileRow] });
+    await createAutoAssignProfile({
+      id: "most-experienced",
+      name: "Most Experienced",
+      plan: [{ roles: ["lead", "experience"], preferSeniorFirst: true }],
+      sortOrder: 40,
+    });
+    const [, params] = mockQuery.mock.calls[0];
+    expect(params[2]).toBe(
+      JSON.stringify([{ roles: ["lead", "experience"], preferSeniorFirst: true }])
+    );
+  });
+
+  it("updateAutoAssignProfile returns existing when no updates", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [profileRow] });
+    const updated = await updateAutoAssignProfile("most-experienced", {});
+    expect(updated?.id).toBe("most-experienced");
+    const [sql] = mockQuery.mock.calls[0];
+    expect(sql).toContain("SELECT");
+  });
+
+  it("deleteAutoAssignProfile returns true when deleted", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    expect(await deleteAutoAssignProfile("most-experienced")).toBe(true);
+  });
+});
+
+describe("autoAssignSession with explicit plan", () => {
+  it("accepts a plan array (e.g. a profile plan)", async () => {
+    const exp = { ...staffRow, id: "s-exp", years_experience: 9, role: "experience" };
+    const junior = { ...staffRow, id: "s-jr", years_experience: 1, role: "junior" };
+    mockAutoAssignClient({
+      session: { ...sessionRow, required_staff: 2 },
+      slots: [
+        { id: "slot1", session_id: "sess1", slot_index: 0, assigned_staff_id: null },
+        { id: "slot2", session_id: "sess1", slot_index: 1, assigned_staff_id: null },
+      ],
+      staff: [exp, junior],
+      availability: [
+        { staff_id: "s-exp", session_id: "sess1", status: "available" },
+        { staff_id: "s-jr", session_id: "sess1", status: "available" },
+      ],
+    });
+
+    const result = await autoAssignSession("sess1", [
+      { roles: ["lead", "experience", "junior", "trial"], preferSeniorFirst: true },
+    ]);
+    expect(result.assigned).toBe(2);
+
+    const assignCalls = mockClientQuery.mock.calls.filter(
+      ([sql]) =>
+        typeof sql === "string" &&
+        sql.includes("UPDATE session_slot SET assigned_staff_id")
+    );
+    // Most experienced first: s-exp should be assigned before s-jr.
+    expect(assignCalls[0][1]).toEqual(["s-exp", "slot1"]);
   });
 });
 

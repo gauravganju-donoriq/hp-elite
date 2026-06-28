@@ -11,6 +11,8 @@ import type {
   AutoAssignConflict,
   AutoAssignResult,
   AutoAssignStrategy,
+  AutoAssignRule,
+  AutoAssignProfile,
   ClassType,
   Report,
   ReportPayload,
@@ -676,6 +678,21 @@ export async function unassignSlot(slotId: string): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
+// Clears every assignment (and any adjusted worked window) across the given
+// sessions. Used by the bulk "clear day/week" action before a fresh re-assign.
+export async function clearAssignmentsForSessions(
+  sessionIds: string[]
+): Promise<number> {
+  if (sessionIds.length === 0) return 0;
+  const { rowCount } = await pool.query(
+    `UPDATE session_slot
+     SET assigned_staff_id = NULL, assigned_start_time = NULL, assigned_end_time = NULL
+     WHERE session_id = ANY($1::text[]) AND assigned_staff_id IS NOT NULL`,
+    [sessionIds]
+  );
+  return rowCount ?? 0;
+}
+
 // Adjusts the worked window for an already-assigned slot. Passing null/undefined
 // for both times resets the slot back to the full session window.
 export async function updateSlotTimes(
@@ -699,13 +716,7 @@ const ROLE_PRIORITY: Record<StaffRole, number> = {
   trial: 3,
 };
 
-type StrategyBucket = {
-  roles: StaffRole[];
-  max?: number;
-  preferSeniorFirst: boolean;
-};
-
-const STRATEGY_PLAN: Record<AutoAssignStrategy, StrategyBucket[]> = {
+const STRATEGY_PLAN: Record<AutoAssignStrategy, AutoAssignRule[]> = {
   cheap: [
     { roles: ["trial"], preferSeniorFirst: false },
     { roles: ["junior"], preferSeniorFirst: false },
@@ -730,13 +741,25 @@ const STRATEGY_PLAN: Record<AutoAssignStrategy, StrategyBucket[]> = {
   ],
 };
 
+// Resolves the second argument of autoAssignSession into a concrete rule plan.
+// Accepts either a built-in strategy key (back-compat) or an explicit plan
+// (e.g. a user-defined profile's plan).
+function resolvePlan(
+  planOrStrategy?: AutoAssignStrategy | AutoAssignRule[]
+): AutoAssignRule[] {
+  if (Array.isArray(planOrStrategy)) {
+    return planOrStrategy.length > 0 ? planOrStrategy : STRATEGY_PLAN.balanced;
+  }
+  return STRATEGY_PLAN[planOrStrategy ?? "balanced"] ?? STRATEGY_PLAN.balanced;
+}
+
 function buildOrderedCandidates(
   availableStaff: Staff[],
-  strategy: AutoAssignStrategy,
+  plan: AutoAssignRule[],
   existingRoleCounts: Record<StaffRole, number>,
   assignmentCounts: Map<string, number>
 ): Staff[] {
-  const buckets = STRATEGY_PLAN[strategy];
+  const buckets = plan;
   const remainingByRole: Record<StaffRole, number> = {
     lead: existingRoleCounts.lead,
     experience: existingRoleCounts.experience,
@@ -785,8 +808,9 @@ function buildOrderedCandidates(
 
 export async function autoAssignSession(
   sessionId: string,
-  strategy: AutoAssignStrategy = "balanced"
+  planOrStrategy?: AutoAssignStrategy | AutoAssignRule[]
 ): Promise<AutoAssignResult> {
+  const plan = resolvePlan(planOrStrategy);
   let totalAssigned = 0;
   let totalEmpty = 0;
   const conflicts: AutoAssignConflict[] = [];
@@ -932,7 +956,7 @@ export async function autoAssignSession(
 
     const orderedCandidates = buildOrderedCandidates(
       availableStaff,
-      strategy,
+      plan,
       existingRoleCounts,
       assignmentCounts
     );
@@ -1176,6 +1200,94 @@ export async function updateClassType(
 export async function deleteClassType(id: string): Promise<boolean> {
   const { rowCount } = await pool.query(
     `DELETE FROM class_type WHERE id = $1`,
+    [id]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+// --------------- Auto-Assign Profiles ---------------
+
+function mapAutoAssignProfileRow(row: Record<string, unknown>): AutoAssignProfile {
+  const planVal = row.plan;
+  const plan: AutoAssignRule[] =
+    typeof planVal === "string"
+      ? (JSON.parse(planVal) as AutoAssignRule[])
+      : ((planVal as AutoAssignRule[]) ?? []);
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    plan,
+    sortOrder: (row.sort_order as number) ?? 0,
+    isBuiltin: Boolean(row.is_builtin),
+  };
+}
+
+export async function getAllAutoAssignProfiles(): Promise<AutoAssignProfile[]> {
+  const { rows } = await pool.query(
+    `SELECT id, name, plan, sort_order, is_builtin
+     FROM auto_assign_profile ORDER BY sort_order, name`
+  );
+  return rows.map(mapAutoAssignProfileRow);
+}
+
+export async function getAutoAssignProfile(
+  id: string
+): Promise<AutoAssignProfile | null> {
+  const { rows } = await pool.query(
+    `SELECT id, name, plan, sort_order, is_builtin
+     FROM auto_assign_profile WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ? mapAutoAssignProfileRow(rows[0]) : null;
+}
+
+export async function createAutoAssignProfile(
+  input: Omit<AutoAssignProfile, "isBuiltin">
+): Promise<AutoAssignProfile> {
+  const { rows } = await pool.query(
+    `INSERT INTO auto_assign_profile (id, name, plan, sort_order, is_builtin)
+     VALUES ($1, $2, $3, $4, FALSE)
+     RETURNING id, name, plan, sort_order, is_builtin`,
+    [input.id, input.name, JSON.stringify(input.plan), input.sortOrder ?? 0]
+  );
+  return mapAutoAssignProfileRow(rows[0]);
+}
+
+export async function updateAutoAssignProfile(
+  id: string,
+  updates: Partial<Pick<AutoAssignProfile, "name" | "plan" | "sortOrder">>
+): Promise<AutoAssignProfile | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (updates.name !== undefined) {
+    setClauses.push(`name = $${idx++}`);
+    values.push(updates.name);
+  }
+  if (updates.plan !== undefined) {
+    setClauses.push(`plan = $${idx++}`);
+    values.push(JSON.stringify(updates.plan));
+  }
+  if (updates.sortOrder !== undefined) {
+    setClauses.push(`sort_order = $${idx++}`);
+    values.push(updates.sortOrder);
+  }
+
+  if (setClauses.length === 0) return getAutoAssignProfile(id);
+
+  values.push(id);
+  const { rows } = await pool.query(
+    `UPDATE auto_assign_profile SET ${setClauses.join(", ")} WHERE id = $${idx}
+     RETURNING id, name, plan, sort_order, is_builtin`,
+    values
+  );
+  return rows[0] ? mapAutoAssignProfileRow(rows[0]) : null;
+}
+
+export async function deleteAutoAssignProfile(id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM auto_assign_profile WHERE id = $1`,
     [id]
   );
   return (rowCount ?? 0) > 0;

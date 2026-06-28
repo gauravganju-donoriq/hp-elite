@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { AutoAssignProfilesPanel } from "@/components/auto-assign-profiles-panel";
 import {
   CLASS_TYPE_PALETTE,
   DEFAULT_COLOR_KEY,
@@ -165,7 +166,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Manage class types used across schedules.
+            Manage class types and auto-assign profiles used across schedules.
           </p>
         </div>
         <Button onClick={openAdd}>
@@ -260,6 +261,8 @@ export default function SettingsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <AutoAssignProfilesPanel />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>

@@ -83,6 +83,23 @@ export interface AutoAssignResult {
 
 export type AutoAssignStrategy = "cheap" | "balanced" | "expensive";
 
+// A single ordered step in an auto-assign profile: pull from these roles, up to
+// `max` slots (unlimited when omitted), preferring the most experienced first
+// when `preferSeniorFirst` is true (otherwise least experienced / cheapest).
+export interface AutoAssignRule {
+  roles: StaffRole[];
+  max?: number;
+  preferSeniorFirst: boolean;
+}
+
+export interface AutoAssignProfile {
+  id: string;
+  name: string;
+  plan: AutoAssignRule[];
+  sortOrder: number;
+  isBuiltin?: boolean;
+}
+
 export type ReportPeriodType = "weekly" | "monthly";
 export type ReportScope = "breakdown" | "single";
 
