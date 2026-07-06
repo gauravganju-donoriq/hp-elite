@@ -15,10 +15,12 @@ import type {
   AutoAssignProfile,
   ClassType,
   Report,
+  ReportKind,
   ReportPayload,
   ReportPeriodType,
   ReportScope,
   ReportSummary,
+  HoursSubmission,
   ScheduleBoard,
   BoardScheduledStaff,
   BoardAvailableStaff,
@@ -1038,7 +1040,7 @@ function mapSlotRow(row: Record<string, unknown>): SessionSlot {
 
 export async function getAllReports(): Promise<ReportSummary[]> {
   const { rows } = await pool.query(
-    `SELECT id, name, schedule_id, schedule_name, period_type, scope,
+    `SELECT id, name, schedule_id, schedule_name, kind, period_type, scope,
             period_start, period_end, generated_at
      FROM report ORDER BY generated_at DESC`
   );
@@ -1047,7 +1049,7 @@ export async function getAllReports(): Promise<ReportSummary[]> {
 
 export async function getReportById(id: string): Promise<Report | null> {
   const { rows } = await pool.query(
-    `SELECT id, name, schedule_id, schedule_name, period_type, scope,
+    `SELECT id, name, schedule_id, schedule_name, kind, period_type, scope,
             period_start, period_end, generated_at, payload
      FROM report WHERE id = $1`,
     [id]
@@ -1060,6 +1062,7 @@ export async function createReport(report: {
   name: string;
   scheduleId: string;
   scheduleName: string;
+  kind: ReportKind;
   periodType: ReportPeriodType;
   scope: ReportScope;
   periodStart: string;
@@ -1068,16 +1071,17 @@ export async function createReport(report: {
 }): Promise<Report> {
   const { rows } = await pool.query(
     `INSERT INTO report
-       (id, name, schedule_id, schedule_name, period_type, scope,
+       (id, name, schedule_id, schedule_name, kind, period_type, scope,
         period_start, period_end, payload)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING id, name, schedule_id, schedule_name, period_type, scope,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING id, name, schedule_id, schedule_name, kind, period_type, scope,
                period_start, period_end, generated_at, payload`,
     [
       report.id,
       report.name,
       report.scheduleId,
       report.scheduleName,
+      report.kind,
       report.periodType,
       report.scope,
       report.periodStart,
@@ -1093,12 +1097,41 @@ export async function deleteReport(id: string): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
+// Overwrite the per-staff notes inside a stored report payload. Used by admins
+// reviewing a payroll report.
+export async function updateReportNotes(
+  id: string,
+  notesByStaffId: Record<string, string>
+): Promise<Report | null> {
+  const existing = await getReportById(id);
+  if (!existing) return null;
+
+  const payload: ReportPayload = {
+    ...existing.payload,
+    rows: existing.payload.rows.map((row) =>
+      row.staffId in notesByStaffId
+        ? { ...row, notes: notesByStaffId[row.staffId] }
+        : row
+    ),
+  };
+
+  const { rows } = await pool.query(
+    `UPDATE report SET payload = $2
+     WHERE id = $1
+     RETURNING id, name, schedule_id, schedule_name, kind, period_type, scope,
+               period_start, period_end, generated_at, payload`,
+    [id, JSON.stringify(payload)]
+  );
+  return rows[0] ? mapReportRow(rows[0]) : null;
+}
+
 function mapReportSummaryRow(row: Record<string, unknown>): ReportSummary {
   return {
     id: row.id as string,
     name: row.name as string,
     scheduleId: row.schedule_id as string,
     scheduleName: row.schedule_name as string,
+    kind: (row.kind as ReportKind) ?? "hours",
     periodType: row.period_type as ReportPeriodType,
     scope: row.scope as ReportScope,
     periodStart: formatDate(row.period_start),
@@ -1120,6 +1153,78 @@ function mapReportRow(row: Record<string, unknown>): Report {
     ...mapReportSummaryRow(row),
     payload,
   };
+}
+
+// --------------- Hours submissions ---------------
+
+function mapHoursSubmissionRow(row: Record<string, unknown>): HoursSubmission {
+  return {
+    id: row.id as string,
+    staffId: row.staff_id as string,
+    weekStart: formatDate(row.week_start),
+    weekEnd: formatDate(row.week_end),
+    submittedHours: Number(row.submitted_hours),
+    notes: (row.notes as string) ?? undefined,
+    submittedAt:
+      row.submitted_at instanceof Date
+        ? row.submitted_at.toISOString()
+        : String(row.submitted_at),
+  };
+}
+
+export async function getSubmissionsForStaff(
+  staffId: string
+): Promise<HoursSubmission[]> {
+  const { rows } = await pool.query(
+    `SELECT id, staff_id, week_start, week_end, submitted_hours, notes, submitted_at
+     FROM hours_submission WHERE staff_id = $1 ORDER BY week_start DESC`,
+    [staffId]
+  );
+  return rows.map(mapHoursSubmissionRow);
+}
+
+export async function getSubmissionsInRange(
+  startISO: string,
+  endISO: string
+): Promise<HoursSubmission[]> {
+  const { rows } = await pool.query(
+    `SELECT id, staff_id, week_start, week_end, submitted_hours, notes, submitted_at
+     FROM hours_submission
+     WHERE week_start >= $1 AND week_start <= $2
+     ORDER BY week_start`,
+    [startISO, endISO]
+  );
+  return rows.map(mapHoursSubmissionRow);
+}
+
+export async function upsertHoursSubmission(input: {
+  staffId: string;
+  weekStart: string;
+  weekEnd: string;
+  submittedHours: number;
+  notes?: string;
+}): Promise<HoursSubmission> {
+  const id = `hours-${input.staffId}-${input.weekStart}`;
+  const { rows } = await pool.query(
+    `INSERT INTO hours_submission
+       (id, staff_id, week_start, week_end, submitted_hours, notes)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (staff_id, week_start) DO UPDATE
+       SET submitted_hours = EXCLUDED.submitted_hours,
+           notes = EXCLUDED.notes,
+           week_end = EXCLUDED.week_end,
+           submitted_at = NOW()
+     RETURNING id, staff_id, week_start, week_end, submitted_hours, notes, submitted_at`,
+    [
+      id,
+      input.staffId,
+      input.weekStart,
+      input.weekEnd,
+      input.submittedHours,
+      input.notes ?? null,
+    ]
+  );
+  return mapHoursSubmissionRow(rows[0]);
 }
 
 // --------------- Helpers ---------------

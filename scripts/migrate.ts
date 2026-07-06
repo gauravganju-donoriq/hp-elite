@@ -109,6 +109,10 @@ async function migrate() {
     // Per-assignment worked window for partial shifts / payroll tracking.
     `ALTER TABLE session_slot ADD COLUMN IF NOT EXISTS assigned_start_time TEXT`,
     `ALTER TABLE session_slot ADD COLUMN IF NOT EXISTS assigned_end_time TEXT`,
+    // Report kind: 'hours' (weekly/monthly breakdown) or 'payroll' (per-day).
+    `ALTER TABLE report ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'hours'`,
+    `ALTER TABLE report DROP CONSTRAINT IF EXISTS report_kind_check`,
+    `ALTER TABLE report ADD CONSTRAINT report_kind_check CHECK (kind IN ('hours', 'payroll'))`,
   ];
 
   const postSeedStatements = [

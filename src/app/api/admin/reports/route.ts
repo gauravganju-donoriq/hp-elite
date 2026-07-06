@@ -6,9 +6,17 @@ import {
   getAllSlots,
   getAllStaff,
   getScheduleById,
+  getSubmissionsInRange,
 } from "@/lib/queries";
-import { computeReport, formatReportName } from "@/lib/reports";
-import type { ReportPeriodType, ReportScope } from "@/lib/types";
+import {
+  computeReport,
+  computePayrollReport,
+  formatReportName,
+  formatPayrollReportName,
+} from "@/lib/reports";
+import type { ReportKind, ReportPeriodType, ReportScope } from "@/lib/types";
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET() {
   const session = await getSession();
@@ -26,17 +34,90 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as {
     scheduleId?: string;
+    kind?: ReportKind;
     periodType?: ReportPeriodType;
     scope?: ReportScope;
     periodAnchor?: string;
+    rangeStart?: string;
+    rangeEnd?: string;
     name?: string;
   };
 
-  const { scheduleId, periodType, scope, periodAnchor, name } = body;
+  const { scheduleId, kind = "hours", name } = body;
 
-  if (!scheduleId || !periodType || !scope) {
+  if (!scheduleId) {
     return NextResponse.json(
-      { error: "scheduleId, periodType and scope are required" },
+      { error: "scheduleId is required" },
+      { status: 400 }
+    );
+  }
+  if (kind !== "hours" && kind !== "payroll") {
+    return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
+  }
+
+  const schedule = await getScheduleById(scheduleId);
+  if (!schedule) {
+    return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+  }
+
+  const id = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  if (kind === "payroll") {
+    const { rangeStart, rangeEnd } = body;
+    if (!rangeStart || !ISO_DATE.test(rangeStart) || !rangeEnd || !ISO_DATE.test(rangeEnd)) {
+      return NextResponse.json(
+        { error: "rangeStart and rangeEnd (YYYY-MM-DD) are required for payroll reports" },
+        { status: 400 }
+      );
+    }
+    if (rangeStart > rangeEnd) {
+      return NextResponse.json(
+        { error: "rangeStart must be on or before rangeEnd" },
+        { status: 400 }
+      );
+    }
+
+    const [staff, slots, submissions] = await Promise.all([
+      getAllStaff(),
+      getAllSlots(),
+      getSubmissionsInRange(rangeStart, rangeEnd),
+    ]);
+
+    const { payload, periodStart, periodEnd } = computePayrollReport({
+      schedule,
+      sessions: schedule.sessions,
+      slots,
+      staff,
+      submissions,
+      rangeStart,
+      rangeEnd,
+    });
+
+    const reportName =
+      name?.trim() ||
+      formatPayrollReportName(schedule.name, periodStart, periodEnd);
+
+    const saved = await createReport({
+      id,
+      name: reportName,
+      scheduleId: schedule.id,
+      scheduleName: schedule.name,
+      kind: "payroll",
+      periodType: "weekly",
+      scope: "breakdown",
+      periodStart,
+      periodEnd,
+      payload,
+    });
+
+    return NextResponse.json(saved, { status: 201 });
+  }
+
+  const { periodType, scope, periodAnchor } = body;
+
+  if (!periodType || !scope) {
+    return NextResponse.json(
+      { error: "periodType and scope are required" },
       { status: 400 }
     );
   }
@@ -51,11 +132,6 @@ export async function POST(request: NextRequest) {
       { error: "periodAnchor is required when scope is 'single'" },
       { status: 400 }
     );
-  }
-
-  const schedule = await getScheduleById(scheduleId);
-  if (!schedule) {
-    return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
   }
 
   const [staff, slots] = await Promise.all([getAllStaff(), getAllSlots()]);
@@ -74,13 +150,12 @@ export async function POST(request: NextRequest) {
     name?.trim() ||
     formatReportName(schedule.name, periodType, scope, periodStart, periodEnd);
 
-  const id = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
   const saved = await createReport({
     id,
     name: reportName,
     scheduleId: schedule.id,
     scheduleName: schedule.name,
+    kind: "hours",
     periodType,
     scope,
     periodStart,

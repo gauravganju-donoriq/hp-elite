@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarCheck,
   CalendarDays,
+  Clock,
   LogOut,
   Menu,
   X,
@@ -83,6 +84,20 @@ export function StaffNavbar() {
               My Availability
             </Link>
           )}
+          {identity && (
+            <Link
+              href="/hours"
+              className={cn(
+                "transition-colors hover:text-foreground flex items-center gap-1",
+                pathname === "/hours"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground"
+              )}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              My Hours
+            </Link>
+          )}
           <Link
             href="/schedule"
             className={cn(
@@ -153,6 +168,21 @@ export function StaffNavbar() {
             >
               <CalendarCheck className="h-4 w-4" />
               My Availability
+            </Link>
+          )}
+          {identity && (
+            <Link
+              href="/hours"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                pathname === "/hours"
+                  ? "bg-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+            >
+              <Clock className="h-4 w-4" />
+              My Hours
             </Link>
           )}
           <Link

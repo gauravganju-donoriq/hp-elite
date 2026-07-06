@@ -102,11 +102,18 @@ export interface AutoAssignProfile {
 
 export type ReportPeriodType = "weekly" | "monthly";
 export type ReportScope = "breakdown" | "single";
+export type ReportKind = "hours" | "payroll";
 
 export interface ReportBucket {
   label: string;
   start: string;
   end: string;
+  // Populated for payroll reports where each bucket is a single training day.
+  date?: string;
+  dayOfWeek?: string;
+  timeWindow?: string;
+  location?: string;
+  requiredStaff?: number;
 }
 
 export interface ReportRow {
@@ -115,6 +122,17 @@ export interface ReportRow {
   role: StaffRole;
   buckets: number[];
   total: number;
+  // Payroll-only fields.
+  firstName?: string;
+  lastName?: string;
+  // Per-bucket assignment window text, e.g. "Yes (900a-300p)" or "".
+  windows?: string[];
+  // Hours the staff member reported working (null when none submitted).
+  submitted?: number | null;
+  // System total minus submitted.
+  difference?: number;
+  // Notes seeded from the staff submission, editable by the admin.
+  notes?: string;
 }
 
 export interface ReportPayload {
@@ -128,6 +146,7 @@ export interface Report {
   name: string;
   scheduleId: string;
   scheduleName: string;
+  kind: ReportKind;
   periodType: ReportPeriodType;
   scope: ReportScope;
   periodStart: string;
@@ -137,6 +156,16 @@ export interface Report {
 }
 
 export type ReportSummary = Omit<Report, "payload">;
+
+export interface HoursSubmission {
+  id: string;
+  staffId: string;
+  weekStart: string;
+  weekEnd: string;
+  submittedHours: number;
+  notes?: string;
+  submittedAt: string;
+}
 
 // --------------- Shared schedule board ---------------
 

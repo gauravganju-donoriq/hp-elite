@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS report (
   name TEXT NOT NULL,
   schedule_id TEXT NOT NULL REFERENCES schedule(id) ON DELETE CASCADE,
   schedule_name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'hours' CHECK (kind IN ('hours', 'payroll')),
   period_type TEXT NOT NULL CHECK (period_type IN ('weekly', 'monthly')),
   scope TEXT NOT NULL CHECK (scope IN ('breakdown', 'single')),
   period_start DATE NOT NULL,
@@ -101,3 +102,20 @@ CREATE TABLE IF NOT EXISTS report (
 
 CREATE INDEX IF NOT EXISTS idx_report_schedule ON report(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_report_generated_at ON report(generated_at DESC);
+
+-- Weekly hours a staff member reports actually working, submitted through the
+-- staff portal after a week ends. Compared against system-computed hours in
+-- payroll reports.
+CREATE TABLE IF NOT EXISTS hours_submission (
+  id TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  submitted_hours NUMERIC NOT NULL,
+  notes TEXT,
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (staff_id, week_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hours_submission_staff ON hours_submission(staff_id);
+CREATE INDEX IF NOT EXISTS idx_hours_submission_week ON hours_submission(week_start);

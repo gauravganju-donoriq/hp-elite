@@ -1,4 +1,5 @@
 import type {
+  HoursSubmission,
   ReportBucket,
   ReportPayload,
   ReportPeriodType,
@@ -12,7 +13,10 @@ import type {
 import {
   parseTimeToMinutes as sharedParseTimeToMinutes,
   hoursBetween as sharedHoursBetween,
+  formatTimeCompact,
 } from "./time";
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const MONTH_LABELS = [
   "January",
@@ -243,6 +247,146 @@ export function computeReport(input: ComputeReportInput): ComputedReport {
     periodStart,
     periodEnd,
   };
+}
+
+export interface ComputePayrollInput {
+  schedule: Pick<Schedule, "id" | "name" | "startDate" | "endDate">;
+  sessions: Session[];
+  slots: SessionSlot[];
+  staff: Staff[];
+  submissions: HoursSubmission[];
+  rangeStart: string;
+  rangeEnd: string;
+}
+
+function payrollDayLabel(dateStr: string): string {
+  const d = parseISODate(dateStr);
+  return `${DAY_SHORT[d.getUTCDay()]} ${MONTH_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+// A payroll report has one bucket per training session/day in the range. Each
+// row carries the system-computed hours per day plus the staff member's
+// self-reported ("submitted") total, the difference, and notes.
+export function computePayrollReport(
+  input: ComputePayrollInput
+): ComputedReport {
+  const { schedule, sessions, slots, staff, submissions, rangeStart, rangeEnd } =
+    input;
+
+  const daySessions = sessions
+    .filter(
+      (s) =>
+        s.scheduleId === schedule.id &&
+        s.date >= rangeStart &&
+        s.date <= rangeEnd
+    )
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
+    );
+
+  const buckets: ReportBucket[] = daySessions.map((s) => ({
+    label: payrollDayLabel(s.date),
+    start: s.date,
+    end: s.date,
+    date: s.date,
+    dayOfWeek: s.dayOfWeek,
+    timeWindow: `${formatTimeCompact(s.startTime)}-${formatTimeCompact(s.endTime)}`,
+    location: s.location,
+    requiredStaff: s.requiredStaff,
+  }));
+
+  // slot lookup: sessionId -> (staffId -> slot)
+  const slotBySessionStaff = new Map<string, Map<string, SessionSlot>>();
+  for (const slot of slots) {
+    if (!slot.assignedStaffId) continue;
+    let inner = slotBySessionStaff.get(slot.sessionId);
+    if (!inner) {
+      inner = new Map();
+      slotBySessionStaff.set(slot.sessionId, inner);
+    }
+    inner.set(slot.assignedStaffId, slot);
+  }
+
+  // Submitted hours + notes per staff (weeks whose start falls in range).
+  const submittedByStaff = new Map<string, number>();
+  const notesByStaff = new Map<string, string[]>();
+  for (const sub of submissions) {
+    if (sub.weekStart < rangeStart || sub.weekStart > rangeEnd) continue;
+    submittedByStaff.set(
+      sub.staffId,
+      (submittedByStaff.get(sub.staffId) ?? 0) + sub.submittedHours
+    );
+    if (sub.notes && sub.notes.trim()) {
+      const list = notesByStaff.get(sub.staffId) ?? [];
+      list.push(sub.notes.trim());
+      notesByStaff.set(sub.staffId, list);
+    }
+  }
+
+  const rows: ReportRow[] = staff
+    .map<ReportRow>((member) => {
+      const perDay: number[] = [];
+      const windows: string[] = [];
+      for (const session of daySessions) {
+        const slot = slotBySessionStaff.get(session.id)?.get(member.id);
+        if (slot) {
+          const start = slot.assignedStartTime || session.startTime;
+          const end = slot.assignedEndTime || session.endTime;
+          perDay.push(hoursBetween(start, end));
+          windows.push(
+            `Yes (${formatTimeCompact(start)}-${formatTimeCompact(end)})`
+          );
+        } else {
+          perDay.push(0);
+          windows.push("");
+        }
+      }
+      const total = perDay.reduce((a, b) => a + b, 0);
+      const submitted = submittedByStaff.has(member.id)
+        ? (submittedByStaff.get(member.id) as number)
+        : null;
+      const difference = total - (submitted ?? 0);
+      const notes = (notesByStaff.get(member.id) ?? []).join("; ");
+      return {
+        staffId: member.id,
+        staffName: `${member.firstName} ${member.lastName}`.trim(),
+        firstName: member.firstName,
+        lastName: member.lastName,
+        role: member.role,
+        buckets: perDay,
+        total,
+        windows,
+        submitted,
+        difference,
+        notes,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (a.lastName ?? "").localeCompare(b.lastName ?? "") ||
+        (a.firstName ?? "").localeCompare(b.firstName ?? "")
+    );
+
+  const totalHours = rows.reduce((a, r) => a + r.total, 0);
+
+  return {
+    payload: { buckets, rows, totalHours },
+    periodStart: rangeStart,
+    periodEnd: rangeEnd,
+  };
+}
+
+export function formatPayrollReportName(
+  scheduleName: string,
+  rangeStart: string,
+  rangeEnd: string
+): string {
+  const s = parseISODate(rangeStart);
+  const e = parseISODate(rangeEnd);
+  const startStr = `${MONTH_SHORT[s.getUTCMonth()]} ${s.getUTCDate()}`;
+  const endStr = `${MONTH_SHORT[e.getUTCMonth()]} ${e.getUTCDate()}, ${e.getUTCFullYear()}`;
+  return `${scheduleName} - Payroll (${startStr} to ${endStr})`;
 }
 
 export function formatReportName(

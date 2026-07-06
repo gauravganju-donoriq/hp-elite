@@ -61,21 +61,49 @@ export function generateReportPdf(report: Report): void {
 
   doc.setTextColor(0);
 
+  const isPayroll = report.kind === "payroll";
+
   const head = [
-    [
-      "Staff",
-      "Role",
-      ...report.payload.buckets.map((b) => b.label),
-      "Total",
-    ],
+    isPayroll
+      ? [
+          "Staff",
+          ...report.payload.buckets.map((b) => b.label),
+          "Total",
+          "Submitted",
+          "Diff",
+          "Notes",
+        ]
+      : [
+          "Staff",
+          "Role",
+          ...report.payload.buckets.map((b) => b.label),
+          "Total",
+        ],
   ];
 
-  const body = report.payload.rows.map((row) => [
-    row.staffName,
-    ROLE_LABELS[row.role],
-    ...row.buckets.map((h) => formatHours(h)),
-    formatHours(row.total),
-  ]);
+  const body = report.payload.rows.map((row) =>
+    isPayroll
+      ? [
+          row.lastName && row.firstName
+            ? `${row.lastName}, ${row.firstName}`
+            : row.staffName,
+          ...row.buckets.map((h) => (h > 0 ? formatHours(h) : "")),
+          formatHours(row.total),
+          row.submitted === null || row.submitted === undefined
+            ? ""
+            : formatHours(row.submitted),
+          formatHours(row.difference ?? row.total),
+          row.notes ?? "",
+        ]
+      : [
+          row.staffName,
+          ROLE_LABELS[row.role],
+          ...row.buckets.map((h) => formatHours(h)),
+          formatHours(row.total),
+        ]
+  );
+
+  const leadCols = isPayroll ? 1 : 2;
 
   const foot =
     report.payload.rows.length > 0
@@ -83,13 +111,20 @@ export function generateReportPdf(report: Report): void {
           [
             {
               content: "Grand total",
-              colSpan: 2 + bucketCount,
+              colSpan: leadCols + bucketCount,
               styles: { halign: "right" as const, fontStyle: "bold" as const },
             },
             {
               content: formatHours(report.payload.totalHours),
               styles: { fontStyle: "bold" as const },
             },
+            ...(isPayroll
+              ? [
+                  { content: "" },
+                  { content: "" },
+                  { content: "" },
+                ]
+              : []),
           ],
         ]
       : undefined;
@@ -104,7 +139,7 @@ export function generateReportPdf(report: Report): void {
     headStyles: { fillColor: [30, 41, 59], textColor: 255 },
     alternateRowStyles: { fillColor: [245, 245, 249] },
     columnStyles: {
-      [1 + bucketCount + 1]: { fontStyle: "bold" },
+      [leadCols + bucketCount]: { fontStyle: "bold" },
     },
     theme: "grid",
   });
