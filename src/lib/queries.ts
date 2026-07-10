@@ -283,6 +283,18 @@ export async function createSessions(sessions: Session[]): Promise<void> {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [s.id, s.scheduleId, s.date, s.dayOfWeek, s.startTime, s.endTime, s.location, s.requiredStaff, s.classType ?? null]
       );
+      // Create the session's slots in the same transaction so they always
+      // exist atomically with the session. This avoids a race where the client
+      // POSTs slots before the session row has committed (FK violation).
+      const slotCount = Math.max(0, s.requiredStaff ?? 0);
+      for (let i = 0; i < slotCount; i++) {
+        await client.query(
+          `INSERT INTO session_slot (id, session_id, slot_index)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (id) DO NOTHING`,
+          [`slot-${s.id}-${i}`, s.id, i]
+        );
+      }
     }
     await client.query("COMMIT");
   } catch (err) {
@@ -591,6 +603,17 @@ export async function setSlotCount(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Guard against a race where the client reconciles slots before the parent
+    // session has committed. Without the session row, inserting slots would
+    // violate the FK constraint; skip gracefully instead of crashing.
+    const { rows: sessionRows } = await client.query(
+      `SELECT 1 FROM training_session WHERE id = $1`,
+      [sessionId]
+    );
+    if (sessionRows.length === 0) {
+      await client.query("ROLLBACK");
+      return [];
+    }
     await client.query(
       `DELETE FROM session_slot WHERE session_id = $1 AND slot_index >= $2`,
       [sessionId, count]

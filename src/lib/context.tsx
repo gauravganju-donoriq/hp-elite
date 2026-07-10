@@ -72,7 +72,12 @@ interface SchedulingContextType {
   getSessionStaffCount: (sessionId: string) => { confirmed: number; maybe: number; total: number };
 
   initializeSlotsForSession: (sessionId: string, count: number) => void;
-  assignStaffToSlot: (sessionId: string, slotId: string, staffId: string) => void;
+  assignStaffToSlot: (
+    sessionId: string,
+    slotId: string,
+    staffId: string,
+    override?: boolean
+  ) => void;
   unassignSlot: (sessionId: string, slotId: string) => void;
   setSlotTimes: (
     sessionId: string,
@@ -791,7 +796,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
   );
 
   const assignStaffToSlot = useCallback(
-    (sessionId: string, slotId: string, staffId: string) => {
+    (sessionId: string, slotId: string, staffId: string, override = false) => {
       let prevAssigned: string | undefined;
       setSessionSlots((prev) =>
         prev.map((s) => {
@@ -804,7 +809,7 @@ export function SchedulingProvider({ children }: { children: ReactNode }) {
         () =>
           apiFetch(`/api/sessions/${sessionId}/slots`, {
             method: "PATCH",
-            body: JSON.stringify({ slotId, staffId }),
+            body: JSON.stringify({ slotId, staffId, override }),
           }),
         () =>
           setSessionSlots((prev) =>

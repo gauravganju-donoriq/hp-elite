@@ -539,10 +539,14 @@ describe("getAllSlots", () => {
 });
 
 // setSlotCount now always runs inside a transaction (client.query): BEGIN,
-// DELETE excess, SELECT existing slot_index, INSERT each missing slot, COMMIT,
-// then re-reads via getSlotsForSession (pool.query / mockQuery).
-function mockSetSlotCountClient(existingIndexes: number[]) {
+// verify the session exists, DELETE excess, SELECT existing slot_index,
+// INSERT each missing slot, COMMIT, then re-reads via getSlotsForSession
+// (pool.query / mockQuery).
+function mockSetSlotCountClient(existingIndexes: number[], sessionExists = true) {
   mockClientQuery.mockImplementation((sql: unknown) => {
+    if (typeof sql === "string" && sql.includes("FROM training_session")) {
+      return Promise.resolve({ rows: sessionExists ? [{ "?column?": 1 }] : [] });
+    }
     if (typeof sql === "string" && sql.includes("SELECT slot_index")) {
       return Promise.resolve({
         rows: existingIndexes.map((i) => ({ slot_index: i })),
@@ -586,6 +590,21 @@ describe("initializeSlotsForSession", () => {
     );
     expect(mockClientQuery).toHaveBeenCalledWith("COMMIT");
     expect(result).toHaveLength(2);
+  });
+
+  it("skips gracefully when the session does not exist yet (no FK crash)", async () => {
+    mockSetSlotCountClient([], false); // session row not present
+
+    const result = await initializeSlotsForSession("sess-missing", 2);
+
+    expect(result).toEqual([]);
+    expect(mockClientQuery).toHaveBeenCalledWith("BEGIN");
+    expect(mockClientQuery).toHaveBeenCalledWith("ROLLBACK");
+    const insertCalls = mockClientQuery.mock.calls.filter(
+      (c: unknown[]) =>
+        typeof c[0] === "string" && c[0].includes("INSERT INTO session_slot")
+    );
+    expect(insertCalls).toHaveLength(0);
   });
 });
 

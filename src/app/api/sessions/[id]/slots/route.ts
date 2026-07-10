@@ -54,7 +54,7 @@ export async function PATCH(
 
   const { id: sessionId } = await params;
   const body = await request.json();
-  const { slotId, staffId, action, startTime, endTime } = body;
+  const { slotId, staffId, action, startTime, endTime, override } = body;
 
   if (!slotId || typeof slotId !== "string") {
     return NextResponse.json({ error: "slotId is required" }, { status: 400 });
@@ -122,7 +122,7 @@ export async function PATCH(
   } else if (action === "unassign") {
     await unassignSlot(slotId);
   } else if (staffId && typeof staffId === "string") {
-    if (await isStaffDoubleBooked(sessionId, staffId)) {
+    if (override !== true && (await isStaffDoubleBooked(sessionId, staffId))) {
       return NextResponse.json(
         {
           error:

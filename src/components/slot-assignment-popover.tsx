@@ -75,31 +75,39 @@ export function SlotAssignmentPopover({
       .map((s) => s.assignedStaffId!)
   );
 
-  // Staff already assigned to a different session on the same date whose time
-  // window overlaps this one can't be double-booked (mirrors auto-assign).
-  const overlappingSessionIds = new Set(
-    schedules
-      .flatMap((s) => s.sessions)
-      .filter(
-        (s) =>
-          s.id !== session.id &&
-          s.date === session.date &&
-          timeRangesOverlap(
-            session.startTime,
-            session.endTime,
-            s.startTime,
-            s.endTime
-          )
-      )
-      .map((s) => s.id)
+  // Sessions on the same date whose time window overlaps this one. Staff booked
+  // into one of these are "double-booked" for this slot (mirrors auto-assign),
+  // but an admin can still override and assign them anyway.
+  const overlappingSessions = schedules
+    .flatMap((s) => s.sessions)
+    .filter(
+      (s) =>
+        s.id !== session.id &&
+        s.date === session.date &&
+        timeRangesOverlap(
+          session.startTime,
+          session.endTime,
+          s.startTime,
+          s.endTime
+        )
+    );
+  const overlappingSessionById = new Map(
+    overlappingSessions.map((s) => [s.id, s])
   );
-  const doubleBookedStaffIds = new Set(
-    sessionSlots
-      .filter(
-        (s) => s.assignedStaffId && overlappingSessionIds.has(s.sessionId)
-      )
-      .map((s) => s.assignedStaffId!)
-  );
+  // Map each double-booked staff member to the conflicting session's window so
+  // we can surface a helpful label in the override list.
+  const conflictLabelByStaffId = new Map<string, string>();
+  for (const s of sessionSlots) {
+    if (!s.assignedStaffId) continue;
+    const conflict = overlappingSessionById.get(s.sessionId);
+    if (!conflict) continue;
+    if (!conflictLabelByStaffId.has(s.assignedStaffId)) {
+      conflictLabelByStaffId.set(
+        s.assignedStaffId,
+        `${conflict.startTime}–${conflict.endTime}`
+      );
+    }
+  }
 
   const assignmentCounts = new Map<string, number>();
   for (const s of sessionSlots) {
@@ -111,36 +119,39 @@ export function SlotAssignmentPopover({
     }
   }
 
-  // Staff who can be assigned at all: not already in this session and not
-  // double-booked on an overlapping session (a hard constraint that override
-  // does not bypass).
+  // Staff who can be assigned: not already in this session. Double-booked staff
+  // stay in the list but are flagged so they route to the override section.
   const assignableStaff = staff
     .filter((m) => !alreadyAssignedInSession.has(m.id))
-    .filter((m) => !doubleBookedStaffIds.has(m.id))
     .map((member) => {
       const avail = availability.find(
         (a) => a.staffId === member.id && a.sessionId === session.id
       );
       const status = avail?.status || "pending";
-      return { member, status };
+      const conflictLabel = conflictLabelByStaffId.get(member.id);
+      return { member, status, isDoubleBooked: Boolean(conflictLabel), conflictLabel };
     });
 
   const availableStaff = assignableStaff
-    .filter(({ status }) => status === "available")
+    .filter(({ status, isDoubleBooked }) => status === "available" && !isDoubleBooked)
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
   const maybeStaff = assignableStaff
-    .filter(({ status }) => status === "maybe")
+    .filter(({ status, isDoubleBooked }) => status === "maybe" && !isDoubleBooked)
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
   // Staff who haven't marked themselves available/maybe (unavailable, pending,
-  // or no response). An admin can still assign them via the override section.
+  // or no response), plus anyone double-booked on an overlapping session. An
+  // admin can still assign them via the override section.
   const otherStaff = assignableStaff
-    .filter(({ status }) => status !== "available" && status !== "maybe")
+    .filter(
+      ({ status, isDoubleBooked }) =>
+        isDoubleBooked || (status !== "available" && status !== "maybe")
+    )
     .sort((a, b) => sortByExperience(a, b, assignmentCounts));
 
-  function handleAssign(staffId: string) {
-    assignStaffToSlot(session.id, slot.id, staffId);
+  function handleAssign(staffId: string, override = false) {
+    assignStaffToSlot(session.id, slot.id, staffId, override);
     setOpen(false);
   }
 
@@ -179,13 +190,23 @@ export function SlotAssignmentPopover({
     pending: "No reply",
   };
 
-  function renderStaffRow({ member, status }: { member: typeof staff[number]; status: string }) {
+  function renderStaffRow({
+    member,
+    status,
+    isDoubleBooked,
+    conflictLabel,
+  }: {
+    member: typeof staff[number];
+    status: string;
+    isDoubleBooked?: boolean;
+    conflictLabel?: string;
+  }) {
     const isAssigned = slot.assignedStaffId === member.id;
     const count = assignmentCounts.get(member.id) || 0;
     return (
       <button
         key={member.id}
-        onClick={() => handleAssign(member.id)}
+        onClick={() => handleAssign(member.id, isDoubleBooked)}
         className={cn(
           "w-full flex items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
           isAssigned && "bg-accent"
@@ -197,12 +218,22 @@ export function SlotAssignmentPopover({
           ) : (
             <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           )}
-          <span className="truncate">
-            {member.firstName} {member.lastName}
-          </span>
-          <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-            {ROLE_LABELS[member.role]}
-          </Badge>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="truncate">
+                {member.firstName} {member.lastName}
+              </span>
+              <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+                {ROLE_LABELS[member.role]}
+              </Badge>
+            </div>
+            {isDoubleBooked && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-600">
+                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                Double-booked{conflictLabel ? `: ${conflictLabel}` : ""}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
           <span className="text-[10px] text-muted-foreground">
@@ -372,8 +403,8 @@ export function SlotAssignmentPopover({
                 {showOverride && (
                   <>
                     <p className="px-3 pb-1.5 text-[10px] leading-snug text-muted-foreground">
-                      These staff haven&apos;t marked themselves available.
-                      Assigning here overrides their availability.
+                      These staff haven&apos;t marked themselves available or are
+                      already booked at this time. Assigning here overrides that.
                     </p>
                     {otherStaff.map(renderStaffRow)}
                   </>
