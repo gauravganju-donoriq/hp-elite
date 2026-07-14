@@ -2,14 +2,10 @@ import "dotenv/config";
 import { Pool } from "pg";
 import * as fs from "fs";
 import * as path from "path";
+import { getPoolConfig } from "../src/lib/pg-ssl";
 
 async function migrate() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes("sslmode=")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
+  const pool = new Pool(getPoolConfig());
 
   const schemaPath = path.join(__dirname, "../src/lib/schema.sql");
   const sql = fs.readFileSync(schemaPath, "utf-8");
