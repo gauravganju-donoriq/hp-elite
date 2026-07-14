@@ -1,12 +1,8 @@
 import "dotenv/config";
 import { Pool } from "pg";
+import { getPoolConfig } from "../src/lib/pg-ssl";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("sslmode=require")
-    ? { rejectUnauthorized: false }
-    : undefined,
-});
+const pool = new Pool(getPoolConfig());
 
 type StaffRole = "lead" | "experience" | "junior" | "trial";
 

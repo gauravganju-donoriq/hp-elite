@@ -10,12 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { OverviewStat, OverviewStats } from "@/components/overview-stats";
 import {
   Dialog,
   DialogContent,
@@ -71,7 +66,7 @@ function DeleteScheduleDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogTrigger asChild>
-        <Button variant="destructive" size="sm">
+        <Button variant="destructive" size="sm" className="w-full sm:w-auto">
           <Trash2 className="h-4 w-4 mr-1" />
           Delete Schedule
         </Button>
@@ -160,7 +155,7 @@ function EditScheduleDialog({ schedule }: { schedule: Schedule }) {
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="w-full sm:w-auto">
           <Pencil className="h-4 w-4 mr-1" />
           Edit
         </Button>
@@ -188,7 +183,7 @@ function EditScheduleDialog({ schedule }: { schedule: Schedule }) {
               rows={2}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="edit-start">Start Date</Label>
               <Input
@@ -227,7 +222,14 @@ export default function ScheduleDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { staff, schedules, availability, deleteSchedule, updateSchedule, sessionSlots, loading } = useScheduling();
+  const {
+    staff,
+    schedules,
+    availability,
+    deleteSchedule,
+    sessionSlots,
+    loading,
+  } = useScheduling();
 
   if (loading) {
     return (
@@ -286,101 +288,73 @@ export default function ScheduleDetailPage({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push("/admin")}>
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/admin")}
+        className="-ml-2 w-fit text-muted-foreground"
+      >
+        <ArrowLeft className="size-4" />
+        Back to schedules
+      </Button>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{schedule.name}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">
+            {schedule.name}
+          </h1>
           {schedule.description && (
-            <p className="text-muted-foreground mt-1">{schedule.description}</p>
+            <p className="mt-1 text-muted-foreground">{schedule.description}</p>
           )}
-          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <CalendarDays className="h-3.5 w-3.5" />
-              {formatDate(schedule.startDate)} - {formatDate(schedule.endDate)}
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <CalendarDays className="size-4" />
+              {formatDate(schedule.startDate)} – {formatDate(schedule.endDate)}
             </span>
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5" />
-              {[...new Set(schedule.sessions.map((s) => s.location))].join(", ")}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <MapPin className="size-4 shrink-0" />
+              <span className="truncate">
+                {[...new Set(schedule.sessions.map((s) => s.location))].join(", ")}
+              </span>
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <EditScheduleDialog schedule={schedule} />
           <DeleteScheduleDialog schedule={schedule} onConfirm={handleDelete} />
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Sessions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalSessions}</div>
-            <p className="text-xs text-muted-foreground mt-1">Training sessions in this schedule</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              Slots Filled
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {totalAssigned}
-              <span className="text-sm font-normal text-muted-foreground">
-                /{totalRequired}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Staff assigned out of total slots needed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Users className="h-3.5 w-3.5 text-blue-600" />
-              Responses Complete
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {respondedStaffCount}
-              <span className="text-sm font-normal text-muted-foreground">
-                /{totalStaff}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Staff who submitted availability for every session</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
-              Understaffed Sessions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {understaffedCount}
-              <span className="text-sm font-normal text-muted-foreground">
-                /{totalSessions}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Sessions that still need more staff assigned</p>
-          </CardContent>
-        </Card>
-      </div>
+      <OverviewStats columns={4}>
+        <OverviewStat
+          label="Total sessions"
+          value={totalSessions}
+          detail="Training sessions"
+          icon={CalendarDays}
+        />
+        <OverviewStat
+          label="Slots filled"
+          value={`${totalAssigned}/${totalRequired}`}
+          detail="Assigned vs. needed"
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <OverviewStat
+          label="Responses complete"
+          value={`${respondedStaffCount}/${totalStaff}`}
+          detail="Answered every session"
+          icon={Users}
+          tone="brand"
+        />
+        <OverviewStat
+          label="Understaffed"
+          value={`${understaffedCount}/${totalSessions}`}
+          detail="Sessions needing staff"
+          icon={AlertTriangle}
+          tone={understaffedCount > 0 ? "danger" : "success"}
+        />
+      </OverviewStats>
 
       <SessionSlotsPanel schedule={schedule} />
 

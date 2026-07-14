@@ -1,7 +1,7 @@
 "use client";
 
-import { AdminNavbar } from "@/components/admin-navbar";
-import { StaffNavbar } from "@/components/staff-navbar";
+import { AppShell } from "@/components/app-shell";
+import { LoadingState } from "@/components/states";
 import { useStaffIdentity } from "@/lib/staff-context";
 
 export default function SharedLayout({
@@ -9,20 +9,15 @@ export default function SharedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin, loading } = useStaffIdentity();
+  const { loading } = useStaffIdentity();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-dvh">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="flex min-h-dvh items-center justify-center">
+        <LoadingState label="Loading..." />
       </div>
     );
   }
 
-  return (
-    <>
-      {isAdmin ? <AdminNavbar /> : <StaffNavbar />}
-      <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-    </>
-  );
+  return <AppShell>{children}</AppShell>;
 }

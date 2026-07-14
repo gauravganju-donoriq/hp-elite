@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useScheduling } from "@/lib/context";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { LogOut, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { AutoAssignProfilesPanel } from "@/components/auto-assign-profiles-panel";
 import {
   CLASS_TYPE_PALETTE,
@@ -55,6 +58,7 @@ function slugify(value: string): string {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { classTypes, addClassType, updateClassType, removeClassType } =
     useScheduling();
 
@@ -65,6 +69,7 @@ export default function SettingsPage() {
   const [colorKey, setColorKey] = useState<string>(DEFAULT_COLOR_KEY);
   const [sortOrder, setSortOrder] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -151,6 +156,18 @@ export default function SettingsPage() {
     setDeleteId(null);
   }
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast.error("Failed to sign out. Please try again.");
+      setSigningOut(false);
+    }
+  }
+
   const deleteTarget = deleteId
     ? classTypes.find((c) => c.id === deleteId)
     : null;
@@ -162,107 +179,183 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">
-            Manage class types and auto-assign profiles used across schedules.
-          </p>
-        </div>
-        <Button onClick={openAdd}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Class Type
-        </Button>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Manage class types and auto-assign profiles used across schedules."
+        actions={
+          <Button onClick={openAdd}>
+            <Plus className="size-4" />
+            Add Class Type
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardHeader>
+      <Card className="gap-0 py-0">
+        <CardHeader className="border-b py-4">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Tag className="h-4 w-4" />
+            <Tag className="size-4 text-primary" />
             Class Types
           </CardTitle>
           <CardDescription>
-            These categories appear in the session configuration popover and color the schedule grid.
+            These categories appear in the session configuration popover and
+            color the schedule grid.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Preview</TableHead>
-                <TableHead>Label</TableHead>
-                <TableHead>Id</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Sort</TableHead>
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedTypes.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">
-                    No class types yet. Click &ldquo;Add Class Type&rdquo; to create one.
-                  </TableCell>
-                </TableRow>
-              )}
-              {sortedTypes.map((ct) => {
-                const palette = getPaletteEntry(ct.colorKey);
-                return (
-                  <TableRow key={ct.id}>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium",
-                          palette.color
-                        )}
-                      >
-                        {ct.label}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium">{ct.label}</TableCell>
-                    <TableCell>
-                      <code className="text-xs text-muted-foreground">{ct.id}</code>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+          {sortedTypes.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6 sm:py-8">
+              No class types yet. Click &ldquo;Add Class Type&rdquo; to create
+              one.
+            </p>
+          ) : (
+            <>
+              {/* Mobile: card list */}
+              <div className="divide-y md:hidden">
+                {sortedTypes.map((ct) => {
+                  const palette = getPaletteEntry(ct.colorKey);
+                  return (
+                    <div
+                      key={ct.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <div className="min-w-0 space-y-1">
                         <span
                           className={cn(
-                            "h-4 w-4 rounded-full border",
-                            palette.swatch
+                            "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+                            palette.color
                           )}
-                        />
-                        <span className="text-xs">{palette.label}</span>
+                        >
+                          {ct.label}
+                        </span>
+                        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                          <code className="max-w-32 truncate">{ct.id}</code>
+                          <span>·</span>
+                          <span>{palette.label}</span>
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{ct.sortOrder}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon-sm"
                           onClick={() => openEdit(ct.id)}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Pencil className="size-4" />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="text-destructive"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive"
                           onClick={() => setDeleteId(ct.id)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-6">Preview</TableHead>
+                      <TableHead>Label</TableHead>
+                      <TableHead>Id</TableHead>
+                      <TableHead>Color</TableHead>
+                      <TableHead>Sort</TableHead>
+                      <TableHead className="w-[100px] pr-6 text-right">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedTypes.map((ct) => {
+                      const palette = getPaletteEntry(ct.colorKey);
+                      return (
+                        <TableRow key={ct.id}>
+                          <TableCell className="pl-6">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+                                palette.color
+                              )}
+                            >
+                              {ct.label}
+                            </span>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {ct.label}
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-xs text-muted-foreground">
+                              {ct.id}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "size-4 rounded-full border",
+                                  palette.swatch
+                                )}
+                              />
+                              <span className="text-xs">{palette.label}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {ct.sortOrder}
+                          </TableCell>
+                          <TableCell className="pr-6 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => openEdit(ct.id)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => setDeleteId(ct.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
       <AutoAssignProfilesPanel />
+
+      <Card className="lg:hidden">
+        <CardHeader>
+          <CardTitle className="text-base">Account</CardTitle>
+          <CardDescription>Sign out of your administrator account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={handleSignOut}
+            disabled={signingOut}
+          >
+            <LogOut className="size-4" />
+            {signingOut ? "Signing out..." : "Sign out"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -299,7 +392,7 @@ export default function SettingsPage() {
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Color</Label>
                 <Select value={colorKey} onValueChange={setColorKey}>

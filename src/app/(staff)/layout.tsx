@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { StaffNavbar } from "@/components/staff-navbar";
+import { AppShell } from "@/components/app-shell";
 import { UnlinkedAccount } from "@/components/unlinked-account";
+import { LoadingState } from "@/components/states";
 import { useStaffIdentity } from "@/lib/staff-context";
 
 export default function StaffLayout({
@@ -22,8 +23,8 @@ export default function StaffLayout({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-dvh">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="flex min-h-dvh items-center justify-center">
+        <LoadingState label="Loading your workspace..." />
       </div>
     );
   }
@@ -32,19 +33,11 @@ export default function StaffLayout({
 
   if (unlinked) {
     return (
-      <>
-        <StaffNavbar />
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
-          <UnlinkedAccount />
-        </main>
-      </>
+      <AppShell>
+        <UnlinkedAccount />
+      </AppShell>
     );
   }
 
-  return (
-    <>
-      <StaffNavbar />
-      <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-    </>
-  );
+  return <AppShell>{children}</AppShell>;
 }

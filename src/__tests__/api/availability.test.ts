@@ -9,6 +9,8 @@ const {
   mockDeleteAvailability,
   mockGetStaffByUserId,
   mockBulkUpsertAvailability,
+  mockGetSessionById,
+  mockPoolQuery,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetAllAvailability: vi.fn(),
@@ -17,6 +19,8 @@ const {
   mockDeleteAvailability: vi.fn(),
   mockGetStaffByUserId: vi.fn(),
   mockBulkUpsertAvailability: vi.fn(),
+  mockGetSessionById: vi.fn(),
+  mockPoolQuery: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -33,6 +37,11 @@ vi.mock("@/lib/queries", () => ({
   deleteAvailability: mockDeleteAvailability,
   getStaffByUserId: mockGetStaffByUserId,
   bulkUpsertAvailability: mockBulkUpsertAvailability,
+  getSessionById: mockGetSessionById,
+}));
+
+vi.mock("@/lib/db", () => ({
+  default: { query: mockPoolQuery },
 }));
 
 import { GET, POST, DELETE } from "@/app/api/availability/route";
@@ -61,8 +70,8 @@ describe("GET /api/availability", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns all availability without staffId param", async () => {
-    mockGetSession.mockResolvedValueOnce(staffSession);
+  it("returns all availability for admin without staffId param", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
     mockGetAllAvailability.mockResolvedValueOnce([{ staffId: "s1", sessionId: "sess1", status: "available" }]);
     const req = makeRequest("/api/availability");
     const res = await GET(req);
@@ -72,13 +81,24 @@ describe("GET /api/availability", () => {
     expect(mockGetAllAvailability).toHaveBeenCalled();
   });
 
-  it("filters by staffId when param provided", async () => {
-    mockGetSession.mockResolvedValueOnce(staffSession);
+  it("filters by staffId for admin when param provided", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
     mockGetAvailabilityByStaff.mockResolvedValueOnce([]);
     const req = makeRequest("/api/availability?staffId=s1");
     const res = await GET(req);
     expect(res.status).toBe(200);
     expect(mockGetAvailabilityByStaff).toHaveBeenCalledWith("s1");
+  });
+
+  it("returns only own availability for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(staffSession);
+    mockGetStaffByUserId.mockResolvedValueOnce(staffRecord);
+    mockGetAvailabilityByStaff.mockResolvedValueOnce([]);
+    const req = makeRequest("/api/availability?staffId=s1");
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    // staffId param is ignored for non-admins; they always get their own record.
+    expect(mockGetAvailabilityByStaff).toHaveBeenCalledWith(staffRecord.id);
   });
 });
 
@@ -105,8 +125,20 @@ describe("POST /api/availability", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 404 when session does not exist", async () => {
+    mockGetSession.mockResolvedValueOnce(staffSession);
+    mockGetSessionById.mockResolvedValueOnce(null);
+    const req = makeRequest("/api/availability", {
+      method: "POST",
+      body: JSON.stringify({ staffId: "s2", sessionId: "missing", status: "available" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+  });
+
   it("allows staff to set own availability", async () => {
     mockGetSession.mockResolvedValueOnce(staffSession);
+    mockGetSessionById.mockResolvedValueOnce({ id: "sess1" });
     mockGetStaffByUserId.mockResolvedValueOnce(staffRecord);
     mockUpsertAvailability.mockResolvedValueOnce(undefined);
     const req = makeRequest("/api/availability", {
@@ -120,6 +152,7 @@ describe("POST /api/availability", () => {
 
   it("returns 403 when staff tries to set another's availability", async () => {
     mockGetSession.mockResolvedValueOnce(staffSession);
+    mockGetSessionById.mockResolvedValueOnce({ id: "sess1" });
     mockGetStaffByUserId.mockResolvedValueOnce(staffRecord);
     const req = makeRequest("/api/availability", {
       method: "POST",
@@ -131,6 +164,7 @@ describe("POST /api/availability", () => {
 
   it("allows admin to set any staff availability", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockGetSessionById.mockResolvedValueOnce({ id: "sess1" });
     mockGetStaffByUserId.mockResolvedValueOnce({ id: "s-admin", userId: "u1" });
     mockUpsertAvailability.mockResolvedValueOnce(undefined);
     const req = makeRequest("/api/availability", {
@@ -219,8 +253,26 @@ describe("POST /api/availability/bulk", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 when a sessionId does not exist", async () => {
+    mockGetSession.mockResolvedValueOnce(staffSession);
+    // Only sess1 exists; sess2 is missing so the whole batch is rejected.
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ id: "sess1" }] });
+    const req = makeRequest("/api/availability/bulk", {
+      method: "POST",
+      body: JSON.stringify({
+        entries: [
+          { staffId: "s2", sessionId: "sess1", status: "available" },
+          { staffId: "s2", sessionId: "sess2", status: "maybe" },
+        ],
+      }),
+    });
+    const res = await bulkPost(req);
+    expect(res.status).toBe(400);
+  });
+
   it("allows staff to bulk upsert own availability", async () => {
     mockGetSession.mockResolvedValueOnce(staffSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ id: "sess1" }, { id: "sess2" }] });
     mockGetStaffByUserId.mockResolvedValueOnce(staffRecord);
     mockBulkUpsertAvailability.mockResolvedValueOnce(undefined);
     const req = makeRequest("/api/availability/bulk", {
@@ -240,6 +292,7 @@ describe("POST /api/availability/bulk", () => {
 
   it("returns 403 when staff includes another staff's entry", async () => {
     mockGetSession.mockResolvedValueOnce(staffSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ id: "sess1" }, { id: "sess2" }] });
     mockGetStaffByUserId.mockResolvedValueOnce(staffRecord);
     const req = makeRequest("/api/availability/bulk", {
       method: "POST",
@@ -256,6 +309,7 @@ describe("POST /api/availability/bulk", () => {
 
   it("allows admin to bulk upsert for any staff", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ id: "sess1" }, { id: "sess2" }] });
     mockGetStaffByUserId.mockResolvedValueOnce({ id: "s-admin" });
     mockBulkUpsertAvailability.mockResolvedValueOnce(undefined);
     const req = makeRequest("/api/availability/bulk", {

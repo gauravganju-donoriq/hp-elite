@@ -333,12 +333,12 @@ export function AutoAssignProfilesPanel() {
     : null;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
+    <Card className="gap-0 py-0">
+      <CardHeader className="border-b py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="size-4 text-primary" />
               Auto-Assign Profiles
             </CardTitle>
             <CardDescription>
@@ -346,74 +346,125 @@ export function AutoAssignProfilesPanel() {
               of steps (which roles, how many, and seniority order).
             </CardDescription>
           </div>
-          <Button onClick={openAdd} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
+          <Button onClick={openAdd} size="sm" className="w-full sm:w-auto">
+            <Plus className="size-4" />
             Add Profile
           </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Rules</TableHead>
-              <TableHead>Sort</TableHead>
-              <TableHead className="w-[100px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="text-center text-sm text-muted-foreground py-8"
-                >
-                  No profiles yet. Click &ldquo;Add Profile&rdquo; to create one.
-                </TableCell>
-              </TableRow>
-            )}
-            {sorted.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    {p.name}
-                    {p.isBuiltin && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0">
-                        Built-in
-                      </Badge>
-                    )}
+        {sorted.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6 sm:py-8">
+            No profiles yet. Click &ldquo;Add Profile&rdquo; to create one.
+          </p>
+        ) : (
+          <>
+            {/* Mobile: card list */}
+            <div className="divide-y md:hidden">
+              {sorted.map((p) => (
+                <div key={p.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                        <span className="truncate">{p.name}</span>
+                        {p.isBuiltin && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 px-1.5 py-0 text-[9px]"
+                          >
+                            Built-in
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed break-words text-muted-foreground">
+                        {describePlan(p.plan)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => openEdit(p.id)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteId(p.id)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </div>
-                </TableCell>
-                <TableCell className="max-w-[420px]">
-                  <span className="text-xs text-muted-foreground">
-                    {describePlan(p.plan)}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm">{p.sortOrder}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(p.id)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => setDeleteId(p.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden md:block">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-[200px] pl-6">Name</TableHead>
+                    <TableHead>Rules</TableHead>
+                    <TableHead className="w-[72px]">Sort</TableHead>
+                    <TableHead className="w-[100px] pr-6 text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sorted.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="overflow-hidden whitespace-normal pl-6 align-top">
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <span className="truncate font-medium" title={p.name}>
+                            {p.name}
+                          </span>
+                          {p.isBuiltin && (
+                            <Badge
+                              variant="outline"
+                              className="w-fit px-1.5 py-0 text-[9px]"
+                            >
+                              Built-in
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-0 overflow-hidden whitespace-normal align-top">
+                        <p className="text-xs leading-relaxed break-words text-muted-foreground">
+                          {describePlan(p.plan)}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-sm">{p.sortOrder}</TableCell>
+                      <TableCell className="pr-6 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEdit(p.id)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteId(p.id)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </CardContent>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -427,7 +478,7 @@ export function AutoAssignProfilesPanel() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input
@@ -491,7 +542,9 @@ export function AutoAssignProfilesPanel() {
 
             <div className="rounded border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground mb-1">Summary</p>
-              <p className="text-xs">{describePlan(rules)}</p>
+              <p className="text-xs leading-relaxed break-words">
+                {describePlan(rules)}
+              </p>
             </div>
           </div>
           <DialogFooter>

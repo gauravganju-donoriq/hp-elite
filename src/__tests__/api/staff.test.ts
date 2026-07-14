@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-const { mockGetSession, mockGetAllStaff, mockCreateStaff, mockGetStaffById, mockUpdateStaff, mockDeleteStaff, mockGetStaffByUserId } = vi.hoisted(() => ({
+const { mockGetSession, mockGetAllStaff, mockGetAllStaffWithEmail, mockCreateStaff, mockGetStaffById, mockUpdateStaff, mockDeleteStaff, mockGetStaffByUserId, mockHardDeleteUser } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetAllStaff: vi.fn(),
+  mockGetAllStaffWithEmail: vi.fn(),
   mockCreateStaff: vi.fn(),
   mockGetStaffById: vi.fn(),
   mockUpdateStaff: vi.fn(),
   mockDeleteStaff: vi.fn(),
   mockGetStaffByUserId: vi.fn(),
+  mockHardDeleteUser: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -20,11 +22,13 @@ vi.mock("@/lib/api-auth", () => ({
 
 vi.mock("@/lib/queries", () => ({
   getAllStaff: mockGetAllStaff,
+  getAllStaffWithEmail: mockGetAllStaffWithEmail,
   createStaff: mockCreateStaff,
   getStaffById: mockGetStaffById,
   updateStaff: mockUpdateStaff,
   deleteStaff: mockDeleteStaff,
   getStaffByUserId: mockGetStaffByUserId,
+  hardDeleteUser: mockHardDeleteUser,
 }));
 
 import { GET as listStaff, POST as createStaffRoute } from "@/app/api/staff/route";
@@ -64,13 +68,27 @@ describe("GET /api/staff", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns staff list when authenticated", async () => {
+  it("returns full staff list with email for admin", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    mockGetAllStaffWithEmail.mockResolvedValueOnce([sampleStaff]);
+    const res = await listStaff();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual([sampleStaff]);
+    expect(mockGetAllStaffWithEmail).toHaveBeenCalled();
+  });
+
+  it("returns a slim roster for non-admin", async () => {
     mockGetSession.mockResolvedValueOnce(staffSession);
     mockGetAllStaff.mockResolvedValueOnce([sampleStaff]);
     const res = await listStaff();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual([sampleStaff]);
+    // Non-admins get names only: no email, userId, or years of experience.
+    expect(body).toEqual([
+      { id: "s1", firstName: "John", lastName: "", role: "lead", yearsExperience: 0 },
+    ]);
+    expect(mockGetAllStaff).toHaveBeenCalled();
   });
 });
 
@@ -217,7 +235,7 @@ describe("DELETE /api/staff/[id]", () => {
 
   it("returns 404 when staff not found", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
-    mockDeleteStaff.mockResolvedValueOnce(false);
+    // getStaffById returns undefined, so the route 404s before calling deleteStaff.
     const req = makeRequest("http://localhost:3000/api/staff/missing", { method: "DELETE" });
     const res = await deleteStaffRoute(req, makeParams("missing"));
     expect(res.status).toBe(404);
@@ -225,6 +243,8 @@ describe("DELETE /api/staff/[id]", () => {
 
   it("deletes staff and returns success", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    // No linked userId, so the route skips auth-user removal.
+    mockGetStaffById.mockResolvedValueOnce({ ...sampleStaff, userId: null });
     mockDeleteStaff.mockResolvedValueOnce(true);
     const req = makeRequest("http://localhost:3000/api/staff/s1", { method: "DELETE" });
     const res = await deleteStaffRoute(req, makeParams("s1"));

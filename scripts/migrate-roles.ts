@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Pool } from "pg";
+import { getPoolConfig } from "../src/lib/pg-ssl";
 
 const ROLE_MAP: Record<string, string> = {
   "head-coach": "lead",
@@ -17,12 +18,7 @@ async function migrateRoles() {
     process.exit(1);
   }
 
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes("sslmode=")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
+  const pool = new Pool(getPoolConfig());
 
   const client = await pool.connect();
 

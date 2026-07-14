@@ -24,11 +24,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  CheckCircle2,
   Clock,
   MapPin,
-  XCircle,
-  HelpCircle,
   Zap,
   Info,
   ChevronRight,
@@ -45,10 +42,28 @@ import {
   todayISO,
 } from "@/lib/dates";
 import { buildCalendarWeeks } from "@/lib/availability-calendar";
+import { AVAILABILITY_STATUS } from "@/lib/availability-status";
+import { LoadingState } from "@/components/states";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const STATUS_CONFIG: Record<
+// Single source of truth for availability presentation lives in
+// @/lib/availability-status; adapt it to the shape this screen renders.
+const STATUS_CONFIG = Object.fromEntries(
+  Object.entries(AVAILABILITY_STATUS).map(([key, v]) => [
+    key,
+    {
+      label: v.label,
+      description: v.description,
+      icon: <v.Icon className="h-4 w-4" />,
+      btnClass: v.btnClass,
+      btnTint: v.btnTint,
+      cellBg: v.cellBg,
+      dot: v.dot,
+      badgeClass: v.badgeClass,
+    },
+  ])
+) as Record<
   AvailabilityStatus,
   {
     label: string;
@@ -60,48 +75,7 @@ const STATUS_CONFIG: Record<
     dot: string;
     badgeClass: string;
   }
-> = {
-  available: {
-    label: "Available",
-    description: "I can work this session",
-    icon: <CheckCircle2 className="h-4 w-4" />,
-    btnClass: "border-green-500 bg-green-100 text-green-800 hover:bg-green-200 shadow-sm",
-    btnTint: "border-green-200 bg-green-50/60 text-green-700 hover:bg-green-100",
-    cellBg: "bg-green-50 dark:bg-green-950/30",
-    dot: "bg-green-500",
-    badgeClass: "bg-green-200 text-green-900 border-green-400",
-  },
-  unavailable: {
-    label: "Unavailable",
-    description: "I cannot work this session",
-    icon: <XCircle className="h-4 w-4" />,
-    btnClass: "border-red-500 bg-red-100 text-red-800 hover:bg-red-200 shadow-sm",
-    btnTint: "border-red-200 bg-red-50/60 text-red-700 hover:bg-red-100",
-    cellBg: "bg-red-50 dark:bg-red-950/30",
-    dot: "bg-red-500",
-    badgeClass: "bg-red-200 text-red-900 border-red-400",
-  },
-  maybe: {
-    label: "Maybe",
-    description: "I might be able to work",
-    icon: <HelpCircle className="h-4 w-4" />,
-    btnClass: "border-yellow-500 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 shadow-sm",
-    btnTint: "border-yellow-200 bg-yellow-50/60 text-yellow-700 hover:bg-yellow-100",
-    cellBg: "bg-amber-50 dark:bg-yellow-950/30",
-    dot: "bg-yellow-500",
-    badgeClass: "bg-yellow-200 text-yellow-900 border-yellow-400",
-  },
-  pending: {
-    label: "Not Set",
-    description: "You haven't responded yet",
-    icon: <Clock className="h-4 w-4" />,
-    btnClass: "border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100",
-    btnTint: "border-gray-200 bg-gray-50/60 text-gray-500 hover:bg-gray-100",
-    cellBg: "",
-    dot: "bg-gray-300",
-    badgeClass: "bg-gray-200 text-gray-600 border-gray-400",
-  },
-};
+>;
 
 function formatFullDate(dateStr: string) {
   return formatDateDisplay(dateStr).fullLong;
@@ -137,11 +111,7 @@ export default function AvailabilityPage() {
   const activeScheduleId = selectedSchedule || (schedules.length > 0 ? schedules[0].id : "");
 
   if (identityLoading || dataLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
+    return <LoadingState label="Loading your availability..." />;
   }
 
   if (!identity) return null;
@@ -319,18 +289,18 @@ export default function AvailabilityPage() {
         <Label className="text-xs font-medium text-muted-foreground">
           Available for a different time? (optional)
         </Label>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
-            className="h-8 text-xs"
+            className="h-8 text-base sm:text-xs"
             placeholder="e.g. 5:00 PM"
             value={entry.customStartTime || ""}
             onChange={(e) =>
               handleCustomTimeChange(session.id, "customStartTime", e.target.value)
             }
           />
-          <span className="text-muted-foreground text-xs shrink-0">to</span>
+          <span className="shrink-0 self-center text-xs text-muted-foreground">to</span>
           <Input
-            className="h-8 text-xs"
+            className="h-8 text-base sm:text-xs"
             placeholder="e.g. 8:00 PM"
             value={entry.customEndTime || ""}
             onChange={(e) =>
@@ -346,8 +316,8 @@ export default function AvailabilityPage() {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">
             My Availability
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -378,13 +348,13 @@ export default function AvailabilityPage() {
         <>
           {/* How it works banner */}
           {counts.pending > 0 && counts.pending === sessions.length && (
-            <Card className="border-blue-200 bg-blue-50/50">
+            <Card className="border-primary/20 bg-primary/5">
               <CardContent className="py-3 sm:py-4">
                 <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-blue-900">How to set your availability</p>
-                    <ol className="text-xs text-blue-800/80 space-y-0.5 list-decimal list-inside">
+                    <p className="text-sm font-medium text-foreground">How to set your availability</p>
+                    <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
                       <li>Tap any session below to set your status</li>
                       <li>Choose <strong>Available</strong>, <strong>Maybe</strong>, or <strong>Unavailable</strong></li>
                       <li>Use <strong>Quick Actions</strong> to set all days at once</li>
@@ -444,11 +414,14 @@ export default function AvailabilityPage() {
                       key={s}
                       size="sm"
                       variant="outline"
-                      className="text-xs gap-1 h-9"
+                      className="h-8 gap-1 px-2 text-xs sm:h-9 sm:px-3"
                       onClick={() => handleBulkSet(s)}
                     >
                       {STATUS_CONFIG[s].icon}
-                      <span className="hidden sm:inline">Mark All</span> {STATUS_CONFIG[s].label}
+                      <span className="sm:hidden">
+                        {s === "available" ? "All yes" : s === "unavailable" ? "All no" : "All maybe"}
+                      </span>
+                      <span className="hidden sm:inline">Mark all {STATUS_CONFIG[s].label}</span>
                     </Button>
                   ))}
                 </div>
@@ -471,14 +444,14 @@ export default function AvailabilityPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-xs hidden sm:inline-flex"
+                className="inline-flex h-8 px-2 text-xs sm:h-9 sm:px-3"
                 onClick={goToToday}
               >
                 Today
               </Button>
             </div>
             <div className="text-center">
-              <h2 className="text-lg sm:text-xl font-bold tracking-tight">
+              <h2 className="text-base font-bold tracking-tight sm:text-xl">
                 {viewMonthLabel}
               </h2>
               <p className="text-xs text-muted-foreground">{schedule.name}</p>
@@ -512,14 +485,14 @@ export default function AvailabilityPage() {
                   <div key={session.id}>
                     <Card
                       className={cn(
-                        "overflow-hidden transition-all",
+                        "gap-0 overflow-hidden py-0 transition-all",
                         cfg.cellBg,
                         isToday && "ring-2 ring-primary",
                         status === "pending" && !isExpanded && "border-dashed border-muted-foreground/30"
                       )}
                     >
                       <button
-                        className="w-full text-left px-4 py-3.5 active:bg-accent/50 transition-colors"
+                        className="w-full px-3 py-3 text-left transition-colors active:bg-accent/50 sm:px-4 sm:py-3.5"
                         onClick={() => setExpandedMobileSession(isExpanded ? null : session.id)}
                       >
                         <div className="flex items-center justify-between gap-3">

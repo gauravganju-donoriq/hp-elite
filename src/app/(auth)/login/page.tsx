@@ -45,10 +45,12 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">HP Elite</CardTitle>
-        <CardDescription>Sign in to Staff Scheduler</CardDescription>
+        <CardTitle className="text-xl font-bold tracking-tight sm:text-2xl">
+          Welcome back
+        </CardTitle>
+        <CardDescription>Sign in to the Staff Scheduler</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -80,7 +82,7 @@ export default function LoginPage() {
           </Button>
           <p className="text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary underline">
+            <Link href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
               Sign up
             </Link>
           </p>

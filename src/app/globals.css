@@ -9,6 +9,10 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-foreground: var(--brand-accent-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,72 +52,97 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.75rem;
+
+  /* HP Elite brand */
+  --brand: #2277b6;
+  --brand-foreground: #ffffff;
+  --brand-accent: #1dd1a1;
+  --brand-accent-foreground: #05372b;
+
+  /* Cool, enterprise neutral surfaces */
+  --background: oklch(0.985 0.003 247);
+  --foreground: oklch(0.23 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.23 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.23 0.02 260);
+
+  --primary: #2277b6;
+  --primary-foreground: #ffffff;
+
+  --secondary: oklch(0.965 0.006 247);
+  --secondary-foreground: oklch(0.28 0.02 260);
+  --muted: oklch(0.966 0.005 247);
+  --muted-foreground: oklch(0.52 0.02 258);
+  --accent: oklch(0.955 0.017 240);
+  --accent-foreground: oklch(0.3 0.05 250);
+
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  --border: oklch(0.918 0.007 250);
+  --input: oklch(0.918 0.007 250);
+  --ring: #2277b6;
+
+  --chart-1: #2277b6;
+  --chart-2: #1dd1a1;
+  --chart-3: oklch(0.62 0.13 255);
+  --chart-4: oklch(0.72 0.15 85);
+  --chart-5: oklch(0.64 0.2 20);
+
+  /* Sidebar — deep brand navy for a focused enterprise shell */
+  --sidebar: oklch(0.26 0.045 255);
+  --sidebar-foreground: oklch(0.9 0.02 250);
+  --sidebar-primary: #2277b6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(0.34 0.05 255);
+  --sidebar-accent-foreground: oklch(0.98 0.01 250);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #2277b6;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.19 0.02 260);
+  --foreground: oklch(0.96 0.008 250);
+  --card: oklch(0.23 0.022 260);
+  --card-foreground: oklch(0.96 0.008 250);
+  --popover: oklch(0.23 0.022 260);
+  --popover-foreground: oklch(0.96 0.008 250);
+
+  --primary: #3a93d1;
+  --primary-foreground: oklch(0.15 0.02 260);
+
+  --secondary: oklch(0.3 0.02 260);
+  --secondary-foreground: oklch(0.96 0.008 250);
+  --muted: oklch(0.3 0.02 260);
+  --muted-foreground: oklch(0.72 0.02 255);
+  --accent: oklch(0.34 0.03 255);
+  --accent-foreground: oklch(0.97 0.008 250);
+
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --ring: #3a93d1;
+
+  --brand: #3a93d1;
+  --brand-accent: #1dd1a1;
+  --brand-accent-foreground: #05372b;
+
+  --chart-1: #3a93d1;
+  --chart-2: #1dd1a1;
+  --chart-3: oklch(0.7 0.13 255);
+  --chart-4: oklch(0.75 0.15 85);
+  --chart-5: oklch(0.7 0.2 20);
+
+  --sidebar: oklch(0.17 0.02 262);
+  --sidebar-foreground: oklch(0.9 0.02 250);
+  --sidebar-primary: #3a93d1;
+  --sidebar-primary-foreground: oklch(0.15 0.02 260);
+  --sidebar-accent: oklch(0.28 0.03 258);
+  --sidebar-accent-foreground: oklch(0.98 0.01 250);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: #3a93d1;
 }
 
 @layer base {
@@ -125,7 +154,51 @@
     @apply h-full;
   }
   body {
-    @apply bg-background text-foreground min-h-dvh;
+    @apply bg-background text-foreground min-h-dvh overflow-x-clip;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Keep compact controls usable on touch without inflating every CTA. */
+  @media (pointer: coarse) {
+    [data-slot="button"][data-size^="icon"],
+    [data-slot="select-trigger"] {
+      min-height: 2.5rem;
+      min-width: 2.5rem;
+    }
+  }
+}
+
+@layer utilities {
+  /* Safe-area padding for sticky mobile bars. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .h-safe-bottom {
+    height: calc(env(safe-area-inset-bottom, 0px));
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  /* Subtle fade on the right edge of horizontally scrollable grids. */
+  .scroll-fade-x {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 16px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 16px),
+      transparent 100%
+    );
   }
 }
 

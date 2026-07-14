@@ -9,6 +9,7 @@ const {
   mockAssignStaffToSlot,
   mockUnassignSlot,
   mockIsStaffDoubleBooked,
+  mockPoolQuery,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetSlotsForSession: vi.fn(),
@@ -17,6 +18,7 @@ const {
   mockAssignStaffToSlot: vi.fn(),
   mockUnassignSlot: vi.fn(),
   mockIsStaffDoubleBooked: vi.fn(),
+  mockPoolQuery: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -33,6 +35,10 @@ vi.mock("@/lib/queries", () => ({
   assignStaffToSlot: mockAssignStaffToSlot,
   unassignSlot: mockUnassignSlot,
   isStaffDoubleBooked: mockIsStaffDoubleBooked,
+}));
+
+vi.mock("@/lib/db", () => ({
+  default: { query: mockPoolQuery },
 }));
 
 import { GET as getSessionSlots, POST as initSlots, PATCH as patchSlot } from "@/app/api/sessions/[id]/slots/route";
@@ -185,8 +191,20 @@ describe("PATCH /api/sessions/[id]/slots", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 404 when slot not found", async () => {
+    mockGetSession.mockResolvedValueOnce(adminSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [] });
+    const req = makeRequest("/api/sessions/sess1/slots", {
+      method: "PATCH",
+      body: JSON.stringify({ slotId: "slot1", staffId: "s1" }),
+    });
+    const res = await patchSlot(req, makeParams("sess1"));
+    expect(res.status).toBe(404);
+  });
+
   it("returns 400 when neither staffId nor unassign action", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ session_id: "sess1" }] });
     const req = makeRequest("/api/sessions/sess1/slots", {
       method: "PATCH",
       body: JSON.stringify({ slotId: "slot1" }),
@@ -197,6 +215,8 @@ describe("PATCH /api/sessions/[id]/slots", () => {
 
   it("assigns staff to slot", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ session_id: "sess1" }] });
+    mockIsStaffDoubleBooked.mockResolvedValueOnce(false);
     mockAssignStaffToSlot.mockResolvedValueOnce(true);
     const req = makeRequest("/api/sessions/sess1/slots", {
       method: "PATCH",
@@ -209,6 +229,7 @@ describe("PATCH /api/sessions/[id]/slots", () => {
 
   it("unassigns slot", async () => {
     mockGetSession.mockResolvedValueOnce(adminSession);
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ session_id: "sess1" }] });
     mockUnassignSlot.mockResolvedValueOnce(true);
     const req = makeRequest("/api/sessions/sess1/slots", {
       method: "PATCH",

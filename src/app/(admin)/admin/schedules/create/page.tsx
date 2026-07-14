@@ -22,9 +22,11 @@ import {
 } from "@/components/ui/select";
 import { useScheduling } from "@/lib/context";
 import type { Session } from "@/lib/types";
+import { PageHeader } from "@/components/page-header";
 import { addDays, dayOfWeekUTC, formatISODate, parseISODate } from "@/lib/dates";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { ArrowLeft, CalendarClock, Trash2, Plus } from "lucide-react";
+import Link from "next/link";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -136,12 +138,18 @@ export default function CreateSchedulePage() {
   const previewSessions = generateSessions();
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Create Schedule</h1>
-        <p className="text-muted-foreground">
-          Set up a recurring schedule for coaching sessions.
-        </p>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="space-y-4">
+        <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit text-muted-foreground">
+          <Link href="/admin">
+            <ArrowLeft className="size-4" />
+            Back to schedules
+          </Link>
+        </Button>
+        <PageHeader
+          title="Create Schedule"
+          description="Set up a recurring schedule for coaching sessions."
+        />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -170,7 +178,7 @@ export default function CreateSchedulePage() {
                 rows={2}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Start Date *</Label>
                 <Input
@@ -199,96 +207,104 @@ export default function CreateSchedulePage() {
           <CardHeader>
             <CardTitle>Recurring Session Patterns</CardTitle>
             <CardDescription>
-              Define which days of the week have sessions. Sessions will be
+              Define which days of the week have sessions. One session is
               generated for each matching day in your date range.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {patterns.map((pattern, idx) => (
               <div
                 key={idx}
-                className="flex flex-wrap items-end gap-3 rounded-lg border p-3"
+                className="rounded-xl border bg-muted/20 p-3 sm:p-4"
               >
-                <div className="space-y-1 min-w-[120px]">
-                  <Label className="text-xs">Day</Label>
-                  <Select
-                    value={String(pattern.dayOfWeek)}
-                    onValueChange={(v) =>
-                      updatePattern(idx, { dayOfWeek: parseInt(v) })
-                    }
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Pattern {idx + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => removePattern(idx)}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Remove pattern"
                   >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DAYS.map((day, i) => (
-                        <SelectItem key={i} value={String(i)}>
-                          {day}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Trash2 className="size-4" />
+                  </Button>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Start</Label>
-                  <Input
-                    className="h-9 w-28"
-                    value={pattern.startTime}
-                    onChange={(e) =>
-                      updatePattern(idx, { startTime: e.target.value })
-                    }
-                    placeholder="5:00 PM"
-                  />
+                <div className="grid gap-3 sm:grid-cols-6">
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs">Day</Label>
+                    <Select
+                      value={String(pattern.dayOfWeek)}
+                      onValueChange={(v) =>
+                        updatePattern(idx, { dayOfWeek: parseInt(v) })
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAYS.map((day, i) => (
+                          <SelectItem key={i} value={String(i)}>
+                            {day}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Start</Label>
+                    <Input
+                      className="h-9"
+                      value={pattern.startTime}
+                      onChange={(e) =>
+                        updatePattern(idx, { startTime: e.target.value })
+                      }
+                      placeholder="5:00 PM"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">End</Label>
+                    <Input
+                      className="h-9"
+                      value={pattern.endTime}
+                      onChange={(e) =>
+                        updatePattern(idx, { endTime: e.target.value })
+                      }
+                      placeholder="8:00 PM"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Location</Label>
+                    <Input
+                      className="h-9"
+                      value={pattern.location}
+                      onChange={(e) =>
+                        updatePattern(idx, { location: e.target.value })
+                      }
+                      placeholder="Field House"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Staff</Label>
+                    <Input
+                      className="h-9"
+                      type="number"
+                      min={1}
+                      value={pattern.requiredStaff}
+                      onChange={(e) =>
+                        updatePattern(idx, {
+                          requiredStaff: parseInt(e.target.value) || 1,
+                        })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">End</Label>
-                  <Input
-                    className="h-9 w-28"
-                    value={pattern.endTime}
-                    onChange={(e) =>
-                      updatePattern(idx, { endTime: e.target.value })
-                    }
-                    placeholder="8:00 PM"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Location</Label>
-                  <Input
-                    className="h-9 w-32"
-                    value={pattern.location}
-                    onChange={(e) =>
-                      updatePattern(idx, { location: e.target.value })
-                    }
-                    placeholder="Field House"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Staff Needed</Label>
-                  <Input
-                    className="h-9 w-20"
-                    type="number"
-                    min={1}
-                    value={pattern.requiredStaff}
-                    onChange={(e) =>
-                      updatePattern(idx, {
-                        requiredStaff: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removePattern(idx)}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
               </div>
             ))}
-            <Button type="button" variant="outline" onClick={addPattern}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button type="button" variant="outline" onClick={addPattern} className="w-full sm:w-auto">
+              <Plus className="size-4" />
               Add Pattern
             </Button>
           </CardContent>
@@ -297,31 +313,39 @@ export default function CreateSchedulePage() {
         {previewSessions.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Preview</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarClock className="size-4 text-primary" />
+                Preview
+              </CardTitle>
               <CardDescription>
-                {previewSessions.length} sessions will be generated.
+                {previewSessions.length} session
+                {previewSessions.length === 1 ? "" : "s"} will be generated.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="max-h-48 overflow-y-auto text-sm space-y-1">
+              <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
                 {previewSessions.slice(0, 20).map((s, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-3 text-muted-foreground"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-muted/40 px-3 py-2 text-sm"
                   >
-                    <span className="font-medium text-foreground w-24">
+                    <span className="w-20 font-medium text-foreground">
                       {s.dayOfWeek}
                     </span>
-                    <span className="w-24">{s.date}</span>
-                    <span>
-                      {s.startTime} - {s.endTime}
+                    <span className="w-24 text-muted-foreground tabular-nums">
+                      {s.date}
                     </span>
-                    <span>{s.location}</span>
-                    <span>({s.requiredStaff} staff)</span>
+                    <span className="text-muted-foreground">
+                      {s.startTime} – {s.endTime}
+                    </span>
+                    <span className="text-muted-foreground">{s.location}</span>
+                    <span className="text-muted-foreground">
+                      ({s.requiredStaff} staff)
+                    </span>
                   </div>
                 ))}
                 {previewSessions.length > 20 && (
-                  <p className="text-muted-foreground pt-1">
+                  <p className="pt-1 text-sm text-muted-foreground">
                     ... and {previewSessions.length - 20} more
                   </p>
                 )}
@@ -330,14 +354,17 @@ export default function CreateSchedulePage() {
           </Card>
         )}
 
-        <div className="flex gap-3">
-          <Button type="submit">Create Schedule</Button>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.push("/admin")}
+            className="sm:w-auto"
           >
             Cancel
+          </Button>
+          <Button type="submit" className="sm:w-auto">
+            Create Schedule
           </Button>
         </div>
       </form>

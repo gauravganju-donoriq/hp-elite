@@ -1,10 +1,6 @@
 import { Pool } from "pg";
+import { getPoolConfig } from "./pg-ssl";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("sslmode=")
-    ? { rejectUnauthorized: false }
-    : undefined,
-});
+const pool = new Pool(getPoolConfig());
 
 export default pool;

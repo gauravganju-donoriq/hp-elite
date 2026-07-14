@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  CalendarRange,
+  Clock3,
   Download,
   Eye,
   FileSpreadsheet,
   FileText,
   Loader2,
+  MoreHorizontal,
+  Receipt,
   Sparkles,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,12 +22,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -42,10 +45,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, LoadingState } from "@/components/states";
 import { cn } from "@/lib/utils";
 import { useScheduling } from "@/lib/context";
 import type {
@@ -69,9 +76,34 @@ function formatDateDisplay(iso: string): string {
   });
 }
 
+function formatDateShort(iso: string): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function formatDateTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function formatDateTimeCompact(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
@@ -94,6 +126,28 @@ function fmtHrs(n: number | null | undefined): string {
   return String(Math.round(n * 100) / 100);
 }
 
+type HistoryFilter = "all" | ReportKind;
+
+const REPORT_TYPES: {
+  value: ReportKind;
+  title: string;
+  description: string;
+  icon: typeof Wallet;
+}[] = [
+  {
+    value: "payroll",
+    title: "Payroll",
+    description: "Per-day system hours vs submitted hours, with editable notes.",
+    icon: Wallet,
+  },
+  {
+    value: "hours",
+    title: "Hours",
+    description: "Weekly or monthly assigned-hours breakdown by staff.",
+    icon: Clock3,
+  },
+];
+
 export default function ReportsPage() {
   const { schedules, loading: schedulesLoading } = useScheduling();
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -102,6 +156,8 @@ export default function ReportsPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [csvId, setCsvId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
 
   const [scheduleId, setScheduleId] = useState<string>("");
   const [kind, setKind] = useState<ReportKind>("payroll");
@@ -111,7 +167,6 @@ export default function ReportsPage() {
   const [rangeStart, setRangeStart] = useState<string>("");
   const [rangeEnd, setRangeEnd] = useState<string>("");
 
-  // Payroll report detail dialog (view + edit notes + export).
   const [viewReport, setViewReport] = useState<Report | null>(null);
   const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -121,6 +176,21 @@ export default function ReportsPage() {
     () => schedules.find((s) => s.id === scheduleId),
     [schedules, scheduleId]
   );
+
+  const payrollCount = useMemo(
+    () => reports.filter((r) => r.kind === "payroll").length,
+    [reports]
+  );
+  const hoursCount = useMemo(
+    () => reports.filter((r) => r.kind === "hours").length,
+    [reports]
+  );
+  const latestReport = reports[0] ?? null;
+
+  const filteredReports = useMemo(() => {
+    if (historyFilter === "all") return reports;
+    return reports.filter((r) => r.kind === historyFilter);
+  }, [reports, historyFilter]);
 
   useEffect(() => {
     if (!scheduleId && schedules.length > 0) {
@@ -215,6 +285,7 @@ export default function ReportsPage() {
         generatedAt: saved.generatedAt,
       };
       setReports((prev) => [summary, ...prev]);
+      setHistoryFilter("all");
       toast.success("Report generated.");
     } catch (err) {
       toast.error(
@@ -310,11 +381,10 @@ export default function ReportsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    const report = reports.find((r) => r.id === id);
-    if (!report) return;
-    if (!confirm(`Delete report "${report.name}"?`)) return;
-
+  async function confirmDelete() {
+    const id = deleteTargetId;
+    if (!id) return;
+    setDeleteTargetId(null);
     setDeletingId(id);
     try {
       const res = await fetch(`/api/admin/reports/${id}`, { method: "DELETE" });
@@ -330,31 +400,185 @@ export default function ReportsPage() {
     }
   }
 
+  const deleteTarget = deleteTargetId
+    ? reports.find((r) => r.id === deleteTargetId)
+    : null;
+
+  function isBusy(id: string) {
+    return (
+      viewLoadingId === id ||
+      csvId === id ||
+      downloadingId === id ||
+      deletingId === id
+    );
+  }
+
+  function renderPrimaryActions(r: ReportSummary) {
+    const busy = isBusy(r.id);
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        {r.kind === "payroll" && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="View report"
+            title="View report"
+            onClick={() => handleView(r.id)}
+            disabled={busy}
+          >
+            {viewLoadingId === r.id ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Eye className="size-3.5" />
+            )}
+          </Button>
+        )}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="More report actions"
+              disabled={busy}
+            >
+              {busy && !viewLoadingId && !csvId && !downloadingId ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <MoreHorizontal className="size-4" />
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-48 p-1">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-accent disabled:opacity-50"
+              onClick={() => handleExportCsv(r.id)}
+              disabled={csvId === r.id}
+            >
+              <FileSpreadsheet className="size-4 text-muted-foreground" />
+              Download CSV
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-accent disabled:opacity-50"
+              onClick={() => handleDownload(r.id)}
+              disabled={downloadingId === r.id}
+            >
+              <Download className="size-4 text-muted-foreground" />
+              Download PDF
+            </button>
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              onClick={() => setDeleteTargetId(r.id)}
+              disabled={deletingId === r.id}
+            >
+              <Trash2 className="size-4" />
+              Delete report
+            </button>
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">
-            Generate hours-logged reports from assigned session slots.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Generate payroll and hours reports from assigned session slots, then export CSV or PDF."
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Generate new report
-          </CardTitle>
-          <CardDescription>
-            Pick a schedule, choose weekly or monthly grouping, and generate a
-            report of hours each staff member is assigned for.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2 sm:col-span-2">
+      {!reportsLoading && reports.length > 0 && (
+        <div className="grid overflow-hidden rounded-xl border bg-card shadow-sm sm:grid-cols-3 sm:divide-x">
+          <OverviewStat
+            icon={FileText}
+            label="Total reports"
+            value={reports.length}
+            detail={
+              latestReport
+                ? `Latest ${formatDateTimeCompact(latestReport.generatedAt)}`
+                : "Saved exports"
+            }
+            tone="brand"
+          />
+          <OverviewStat
+            icon={Wallet}
+            label="Payroll"
+            value={payrollCount}
+            detail="Day-by-day reconciliations"
+          />
+          <OverviewStat
+            icon={Clock3}
+            label="Hours"
+            value={hoursCount}
+            detail="Weekly / monthly breakdowns"
+          />
+        </div>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:items-start">
+        {/* Generate panel */}
+        <section className="overflow-hidden rounded-xl border bg-card shadow-sm xl:sticky xl:top-4">
+          <div className="border-b bg-muted/30 px-4 py-4 sm:px-5">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BarChart3 className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-semibold tracking-tight">Generate report</h2>
+                <p className="text-sm text-muted-foreground">
+                  Choose a type, schedule, and period.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5 p-4 sm:p-5">
+            <div className="space-y-2">
+              <Label>Report type</Label>
+              <div className="grid gap-2">
+                {REPORT_TYPES.map((type) => {
+                  const Icon = type.icon;
+                  const selected = kind === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setKind(type.value)}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "hover:bg-accent/50"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg",
+                          selected
+                            ? "bg-primary/15 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">
+                          {type.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {type.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="report-schedule">Schedule</Label>
               <Select
                 value={scheduleId}
@@ -379,37 +603,24 @@ export default function ReportsPage() {
                 <SelectContent>
                   {schedules.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.name} ({formatDateDisplay(s.startDate)} -{" "}
+                      {s.name} ({formatDateDisplay(s.startDate)} –{" "}
                       {formatDateDisplay(s.endDate)})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="report-kind">Report type</Label>
-              <Select
-                value={kind}
-                onValueChange={(v) => setKind(v as ReportKind)}
-              >
-                <SelectTrigger id="report-kind" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="payroll">
-                    Payroll (per-day, with submitted hours)
-                  </SelectItem>
-                  <SelectItem value="hours">
-                    Hours breakdown (weekly / monthly)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              {selectedSchedule && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CalendarRange className="size-3.5 shrink-0" />
+                  {formatDateDisplay(selectedSchedule.startDate)} –{" "}
+                  {formatDateDisplay(selectedSchedule.endDate)}
+                </p>
+              )}
             </div>
 
             {kind === "payroll" ? (
-              <>
-                <div className="space-y-2 sm:col-span-2">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="space-y-2">
                   <Label htmlFor="report-range-start">Start date</Label>
                   <Input
                     id="report-range-start"
@@ -420,7 +631,7 @@ export default function ReportsPage() {
                     onChange={(e) => setRangeStart(e.target.value)}
                   />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2">
                   <Label htmlFor="report-range-end">End date</Label>
                   <Input
                     id="report-range-end"
@@ -430,53 +641,57 @@ export default function ReportsPage() {
                     max={selectedSchedule?.endDate}
                     onChange={(e) => setRangeEnd(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    The report shows one column per training day in this range,
-                    plus each staff member&apos;s submitted hours, difference,
-                    and notes.
-                  </p>
                 </div>
-              </>
+                <p className="text-xs text-muted-foreground sm:col-span-2 xl:col-span-1">
+                  One column per training day, plus submitted hours, difference,
+                  and notes.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="report-period">Period type</Label>
-                  <Select
-                    value={periodType}
-                    onValueChange={(v) => setPeriodType(v as ReportPeriodType)}
-                  >
-                    <SelectTrigger id="report-period" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="space-y-2">
+                    <Label htmlFor="report-period">Period type</Label>
+                    <Select
+                      value={periodType}
+                      onValueChange={(v) =>
+                        setPeriodType(v as ReportPeriodType)
+                      }
+                    >
+                      <SelectTrigger id="report-period" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="report-scope">Scope</Label>
-                  <Select
-                    value={scope}
-                    onValueChange={(v) => setScope(v as ReportScope)}
-                  >
-                    <SelectTrigger id="report-scope" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="breakdown">
-                        Full breakdown across schedule
-                      </SelectItem>
-                      <SelectItem value="single">
-                        Single {periodType === "weekly" ? "week" : "month"}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label htmlFor="report-scope">Scope</Label>
+                    <Select
+                      value={scope}
+                      onValueChange={(v) => setScope(v as ReportScope)}
+                    >
+                      <SelectTrigger id="report-scope" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="breakdown">
+                          Full schedule breakdown
+                        </SelectItem>
+                        <SelectItem value="single">
+                          Single{" "}
+                          {periodType === "weekly" ? "week" : "month"}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {scope === "single" && (
-                  <div className="space-y-2 sm:col-span-2">
+                  <div className="space-y-2">
                     <Label htmlFor="report-anchor">
                       Date inside target{" "}
                       {periodType === "weekly" ? "week" : "month"}
@@ -491,171 +706,209 @@ export default function ReportsPage() {
                     />
                     <p className="text-xs text-muted-foreground">
                       {periodType === "weekly"
-                        ? "The report covers the Monday-Sunday week containing this date."
-                        : "The report covers the full calendar month containing this date."}
+                        ? "Covers the Monday–Sunday week containing this date."
+                        : "Covers the full calendar month containing this date."}
                     </p>
                   </div>
                 )}
-              </>
+              </div>
             )}
-          </div>
 
-          <div className="mt-6 flex items-center justify-end gap-2">
             <Button
+              className="w-full"
               onClick={handleGenerate}
               disabled={generating || !scheduleId}
             >
               {generating ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                   Generating...
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Sparkles className="size-4" />
                   Generate report
                 </>
               )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Previously generated reports
-          </CardTitle>
-          <CardDescription>
-            Export any report as CSV or PDF, review payroll details, or remove
-            one you no longer need.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {reportsLoading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading reports...
+        {/* History */}
+        <section className="min-w-0 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Receipt className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold tracking-tight">
+                    Report history
+                  </h2>
+                  {!reportsLoading && (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full tabular-nums"
+                    >
+                      {filteredReports.length}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  View, export, or remove saved reports.
+                </p>
+              </div>
             </div>
-          ) : reports.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="h-8 w-8 text-muted-foreground mb-2" />
-              <h3 className="text-sm font-semibold">No reports yet</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Generate your first report above.
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Schedule</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Detail</TableHead>
-                  <TableHead>Range</TableHead>
-                  <TableHead>Generated</TableHead>
-                  <TableHead className="w-[280px] text-right">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell>
-                      <span className="text-sm">{r.scheduleName}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={r.kind === "payroll" ? "default" : "secondary"}
-                      >
-                        {kindLabel(r.kind)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {r.kind === "payroll" ? (
-                        <Badge variant="outline">Per-day</Badge>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          {periodLabel(r.periodType)} · {scopeLabel(r.scope)}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDateDisplay(r.periodStart)} -{" "}
-                      {formatDateDisplay(r.periodEnd)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDateTime(r.generatedAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        {r.kind === "payroll" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleView(r.id)}
-                            disabled={viewLoadingId === r.id}
-                          >
-                            {viewLoadingId === r.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Eye className="h-3.5 w-3.5 mr-1" />
-                            )}
-                            View
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleExportCsv(r.id)}
-                          disabled={csvId === r.id}
-                        >
-                          {csvId === r.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
-                          )}
-                          CSV
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(r.id)}
-                          disabled={downloadingId === r.id}
-                        >
-                          {downloadingId === r.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Download className="h-3.5 w-3.5 mr-1" />
-                          )}
-                          PDF
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => handleDelete(r.id)}
-                          disabled={deletingId === r.id}
-                        >
-                          {deletingId === r.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
+
+            {!reportsLoading && reports.length > 0 && (
+              <Tabs
+                value={historyFilter}
+                onValueChange={(v) => setHistoryFilter(v as HistoryFilter)}
+              >
+              <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+                  <TabsTrigger value="all" className="px-2 text-xs sm:text-sm">All</TabsTrigger>
+                  <TabsTrigger value="payroll" className="px-2 text-xs sm:text-sm">Payroll</TabsTrigger>
+                  <TabsTrigger value="hours" className="px-2 text-xs sm:text-sm">Hours</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+
+          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            {reportsLoading ? (
+              <LoadingState label="Loading reports..." />
+            ) : reports.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  icon={FileText}
+                  title="No reports yet"
+                  description="Use the generator to create your first payroll or hours report."
+                />
+              </div>
+            ) : filteredReports.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  icon={FileText}
+                  title={`No ${historyFilter} reports`}
+                  description="Try another filter, or generate a new report of this type."
+                />
+              </div>
+            ) : (
+              <>
+                <div className="divide-y lg:hidden">
+                  {filteredReports.map((r) => (
+                    <div key={r.id} className="space-y-3 px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium leading-snug">{r.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {r.scheduleName}
+                          </p>
+                        </div>
+                        <KindBadge kind={r.kind} />
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>
+                          {r.kind === "payroll"
+                            ? "Per-day"
+                            : `${periodLabel(r.periodType)} · ${scopeLabel(r.scope)}`}
+                        </span>
+                        <span>
+                          {formatDateDisplay(r.periodStart)} –{" "}
+                          {formatDateDisplay(r.periodEnd)}
+                        </span>
+                        <span>{formatDateTime(r.generatedAt)}</span>
+                      </div>
+                      {renderPrimaryActions(r)}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden lg:block">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="pl-5">Report</TableHead>
+                        <TableHead className="w-[100px]">Type</TableHead>
+                        <TableHead className="w-[150px]">Range</TableHead>
+                        <TableHead className="w-[130px]">Generated</TableHead>
+                        <TableHead className="w-[92px] pr-5 text-right">
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredReports.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="max-w-0 whitespace-normal pl-5">
+                            <p
+                              className="truncate font-medium"
+                              title={r.name}
+                            >
+                              {r.name}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {r.scheduleName}
+                              {r.kind === "payroll"
+                                ? " · Per-day"
+                                : ` · ${periodLabel(r.periodType)} · ${scopeLabel(r.scope)}`}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <KindBadge kind={r.kind} />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDateShort(r.periodStart)} –{" "}
+                            {formatDateShort(r.periodEnd)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDateTimeCompact(r.generatedAt)}
+                          </TableCell>
+                          <TableCell className="pr-5 text-right">
+                            {renderPrimaryActions(r)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <Dialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete report?</DialogTitle>
+            <DialogDescription>
+              {deleteTarget ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {deleteTarget.name}
+                  </span>{" "}
+                  will be permanently removed. This cannot be undone.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTargetId(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={viewReport !== null}
@@ -663,7 +916,7 @@ export default function ReportsPage() {
           if (!open) setViewReport(null);
         }}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="flex max-h-[92dvh] max-w-[calc(100vw-1rem)] flex-col overflow-hidden sm:max-w-[95vw]">
           <DialogHeader>
             <DialogTitle>{viewReport?.name}</DialogTitle>
             <DialogDescription>
@@ -674,19 +927,22 @@ export default function ReportsPage() {
 
           {viewReport && (
             <>
-              <div className="flex-1 overflow-auto rounded-md border">
+              <div className="scroll-fade-x no-scrollbar flex-1 overflow-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="sticky left-0 bg-background z-10">
+                      <TableHead className="sticky left-0 z-10 bg-background">
                         Staff
                       </TableHead>
                       {viewReport.payload.buckets.map((b, i) => (
-                        <TableHead key={i} className="text-center min-w-[70px]">
+                        <TableHead
+                          key={i}
+                          className="min-w-[70px] text-center"
+                        >
                           <div className="text-xs font-medium">
                             {b.dayOfWeek}
                           </div>
-                          <div className="text-[10px] text-muted-foreground font-normal">
+                          <div className="text-[10px] font-normal text-muted-foreground">
                             {b.timeWindow}
                           </div>
                         </TableHead>
@@ -702,7 +958,7 @@ export default function ReportsPage() {
                       const diff = row.difference ?? row.total;
                       return (
                         <TableRow key={row.staffId}>
-                          <TableCell className="sticky left-0 bg-background z-10 font-medium whitespace-nowrap">
+                          <TableCell className="sticky left-0 z-10 whitespace-nowrap bg-background font-medium">
                             {row.lastName}, {row.firstName}
                           </TableCell>
                           {row.buckets.map((h, i) => (
@@ -726,7 +982,7 @@ export default function ReportsPage() {
                           </TableCell>
                           <TableCell
                             className={cn(
-                              "text-center tabular-nums font-medium",
+                              "text-center font-medium tabular-nums",
                               diff > 0.001 && "text-red-600",
                               diff < -0.001 && "text-yellow-600"
                             )}
@@ -754,27 +1010,34 @@ export default function ReportsPage() {
                 </Table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="w-full sm:w-auto"
                   onClick={() => handleExportCurrent("pdf")}
                 >
-                  <Download className="h-3.5 w-3.5 mr-1" />
+                  <Download className="size-3.5" />
                   PDF
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
+                  className="w-full sm:w-auto"
                   onClick={() => handleExportCurrent("csv")}
                 >
-                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                  <FileSpreadsheet className="size-3.5" />
                   Export CSV
                 </Button>
-                <Button size="sm" onClick={handleSaveNotes} disabled={savingNotes}>
+                <Button
+                  size="sm"
+                  className="col-span-2 w-full sm:w-auto"
+                  onClick={handleSaveNotes}
+                  disabled={savingNotes}
+                >
                   {savingNotes ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" />
                       Saving...
                     </>
                   ) : (
@@ -786,6 +1049,58 @@ export default function ReportsPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function KindBadge({ kind }: { kind: ReportKind }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "shrink-0 font-medium",
+        kind === "payroll"
+          ? "border-primary/20 bg-primary/10 text-primary"
+          : "border-border bg-muted text-muted-foreground"
+      )}
+    >
+      {kindLabel(kind)}
+    </Badge>
+  );
+}
+
+function OverviewStat({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  icon: typeof FileText;
+  label: string;
+  value: number;
+  detail: string;
+  tone?: "default" | "brand";
+}) {
+  return (
+    <div className="flex items-center gap-2.5 border-b p-3 last:border-b-0 sm:gap-3 sm:border-b-0 sm:p-5">
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10",
+          tone === "brand"
+            ? "bg-primary/10 text-primary"
+            : "bg-muted text-muted-foreground"
+        )}
+      >
+        <Icon className="size-4 sm:size-5" />
+      </span>
+      <div className="min-w-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-xl font-bold tabular-nums sm:text-2xl">{value}</span>
+          <span className="truncate text-xs font-medium sm:text-sm">{label}</span>
+        </div>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
     </div>
   );
 }

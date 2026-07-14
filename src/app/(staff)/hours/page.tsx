@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, LoadingState } from "@/components/states";
 import { useStaffIdentity } from "@/lib/staff-context";
 import { useScheduling } from "@/lib/context";
 import type { HoursSubmission } from "@/lib/types";
@@ -193,16 +195,11 @@ export default function StaffHoursPage() {
   const busy = identityLoading || schedulesLoading || loading;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-          My Hours
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          After each week ends, report how many hours you actually worked. Your
-          admin compares these against the scheduled hours.
-        </p>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="My Hours"
+        description="After each week ends, report the hours you actually worked. Your admin compares these against the scheduled hours."
+      />
 
       {!identity && !identityLoading ? (
         <Card>
@@ -212,21 +209,13 @@ export default function StaffHoursPage() {
           </CardContent>
         </Card>
       ) : busy ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading your weeks...
-        </div>
+        <LoadingState label="Loading your weeks..." />
       ) : weeks.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm font-semibold">No completed weeks yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Once a scheduled week has ended, it will show up here for you to
-              submit your hours.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Clock}
+          title="No completed weeks yet"
+          description="Once a scheduled week has ended, it will show up here for you to submit your hours."
+        />
       ) : (
         <div className="space-y-3">
           {weeks.map((week) => {
@@ -236,15 +225,15 @@ export default function StaffHoursPage() {
             return (
               <Card key={week.weekStart}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base flex items-center gap-2">
+                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <CardTitle className="flex items-center gap-2 text-base">
                       <Clock className="h-4 w-4 text-primary" />
                       {week.label}
                     </CardTitle>
                     {existing ? (
                       <Badge
                         variant="outline"
-                        className="border-green-300 text-green-700"
+                        className="border-emerald-300 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300"
                       >
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         {existing.submittedHours} hrs submitted
@@ -293,9 +282,9 @@ export default function StaffHoursPage() {
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-stretch sm:justify-end">
                     <Button
-                      size="sm"
+                      className="w-full sm:w-auto"
                       onClick={() => handleSave(week)}
                       disabled={saving}
                     >
