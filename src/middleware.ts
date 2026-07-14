@@ -3,49 +3,8 @@ import { getSessionCookie } from "better-auth/cookies";
 
 const STAFF_ROUTES = ["/dashboard", "/availability"];
 
-// Maintenance mode: short-circuit every request while the database migration
-// is in progress. Lifted by reverting this commit.
-const MAINTENANCE_MODE = true;
-
-const MAINTENANCE_HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Down for maintenance</title>
-    <style>
-      body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #0b0b0c; color: #f4f4f5; }
-      main { text-align: center; padding: 2rem; max-width: 32rem; }
-      h1 { font-size: 1.5rem; margin: 0 0 0.75rem; }
-      p { margin: 0; color: #a1a1aa; line-height: 1.6; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>App down for maintenance</h1>
-      <p>We're performing scheduled maintenance and will be back shortly. Thanks for your patience.</p>
-    </main>
-  </body>
-</html>`;
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (MAINTENANCE_MODE) {
-    if (pathname.startsWith("/api")) {
-      return NextResponse.json(
-        { error: "Service unavailable: app is down for maintenance." },
-        { status: 503, headers: { "Retry-After": "3600" } }
-      );
-    }
-    return new NextResponse(MAINTENANCE_HTML, {
-      status: 503,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Retry-After": "3600",
-      },
-    });
-  }
 
   if (pathname.startsWith("/api")) {
     return NextResponse.next();
