@@ -47,10 +47,12 @@ export default function SignupPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">HP Elite</CardTitle>
-        <CardDescription>Create your account</CardDescription>
+        <CardTitle className="text-xl font-bold tracking-tight sm:text-2xl">
+          Create your account
+        </CardTitle>
+        <CardDescription>Join the HP Elite Staff Scheduler</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -92,9 +94,13 @@ export default function SignupPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Creating account..." : "Sign Up"}
           </Button>
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-center text-xs text-muted-foreground">
+            New accounts need an admin to link them to a staff profile before
+            you can submit availability.
+          </p>
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href="/login" className="text-primary underline">
+            <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
               Sign in
             </Link>
           </p>

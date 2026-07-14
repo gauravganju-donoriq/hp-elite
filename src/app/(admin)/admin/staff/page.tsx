@@ -7,12 +7,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +30,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Users, KeyRound, UserPlus } from "lucide-react";
-import type { StaffRole } from "@/lib/types";
+import {
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { PageHeader } from "@/components/page-header";
+import { OverviewStat, OverviewStats } from "@/components/overview-stats";
+import { EmptyState } from "@/components/states";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Users,
+  KeyRound,
+  UserPlus,
+  Award,
+  GraduationCap,
+  Sparkles,
+} from "lucide-react";
+import type { Staff, StaffRole } from "@/lib/types";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
   lead: "Lead",
@@ -46,11 +59,30 @@ const ROLE_LABELS: Record<StaffRole, string> = {
   trial: "Trial",
 };
 
-const ROLE_VARIANTS: Record<StaffRole, "default" | "secondary" | "outline" | "destructive"> = {
-  lead: "default",
-  experience: "secondary",
-  junior: "outline",
-  trial: "outline",
+const ROLE_BADGE: Record<StaffRole, string> = {
+  lead: "bg-primary/10 text-primary border-primary/20",
+  experience:
+    "bg-brand-accent/15 text-emerald-700 border-emerald-200 dark:text-emerald-300 dark:border-emerald-900",
+  junior: "bg-muted text-muted-foreground border-border",
+  trial: "bg-muted text-muted-foreground border-border",
+};
+
+function RoleBadge({ role }: { role: StaffRole }) {
+  return (
+    <Badge variant="outline" className={cn("font-medium", ROLE_BADGE[role])}>
+      {ROLE_LABELS[role]}
+    </Badge>
+  );
+}
+
+const ROLE_STAT: Record<
+  StaffRole,
+  { icon: typeof Award; tone: "brand" | "success" | "default" }
+> = {
+  lead: { icon: Award, tone: "brand" },
+  experience: { icon: Sparkles, tone: "success" },
+  junior: { icon: GraduationCap, tone: "default" },
+  trial: { icon: GraduationCap, tone: "default" },
 };
 
 export default function StaffManagementPage() {
@@ -283,50 +315,137 @@ export default function StaffManagementPage() {
     {} as Record<string, number>
   );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Staff Roster</h1>
-          <p className="text-muted-foreground">
-            Manage coaching staff for the academy.
-          </p>
+  function renderAccount(member: Staff) {
+    if (member.userId) {
+      return (
+        <div className="flex flex-col gap-1">
+          <Badge
+            variant="outline"
+            className="w-fit gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+          >
+            <KeyRound className="size-3" />
+            Linked
+          </Badge>
+          {member.email && (
+            <span className="text-xs text-muted-foreground">{member.email}</span>
+          )}
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openAdd}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Staff
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editId ? "Edit Staff Member" : "Add Staff Member"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>First Name</Label>
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last Name</Label>
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Last name"
-                  />
-                </div>
-              </div>
+      );
+    }
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1"
+        onClick={() => openLinkAccount(member.id)}
+      >
+        <UserPlus className="size-3.5" />
+        Link Account
+      </Button>
+    );
+  }
 
-              {!editId && (
-                <div className="grid grid-cols-2 gap-4">
+  function renderActions(member: Staff) {
+    return (
+      <div className="flex items-center gap-1">
+        {member.userId && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Reset password"
+            onClick={() => openResetPassword(member.id)}
+          >
+            <KeyRound className="size-4" />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Edit"
+          onClick={() => openEdit(member.id)}
+        >
+          <Pencil className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Remove"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => handleRemove(member.id)}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Staff Roster"
+        description="Manage coaching staff for the academy."
+        actions={
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openAdd}>
+                <Plus className="size-4" />
+                Add Staff
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {editId ? "Edit Staff Member" : "Add Staff Member"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editId
+                    ? "Update this staff member's details."
+                    : "Create a staff profile with a login account."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-1">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>First Name</Label>
+                    <Input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="First name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last Name</Label>
+                    <Input
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Last name"
+                    />
+                  </div>
+                </div>
+
+                {!editId && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="staff@example.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Password</Label>
+                      <PasswordInput
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Set a password"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {editId && editingMember?.userId && (
                   <div className="space-y-2">
                     <Label>Email</Label>
                     <Input
@@ -335,208 +454,189 @@ export default function StaffManagementPage() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="staff@example.com"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Used to sign in. Changing it updates their login email.
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select
+                      value={role}
+                      onValueChange={(v) => setRole(v as StaffRole)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Password</Label>
-                    <PasswordInput
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Set a password"
+                    <Label>Years of Experience</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={yearsExperience}
+                      onChange={(e) =>
+                        setYearsExperience(parseInt(e.target.value) || 0)
+                      }
+                      placeholder="0"
                     />
                   </div>
                 </div>
-              )}
-
-              {editId && editingMember?.userId && (
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="staff@example.com"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Used to sign in. Changing it updates their login email.
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select
-                    value={role}
-                    onValueChange={(v) => setRole(v as StaffRole)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Years of Experience</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={yearsExperience}
-                    onChange={(e) => setYearsExperience(parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                  />
-                </div>
               </div>
-
-              <div className="flex justify-end gap-2">
+              <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
-                  {saving ? "Saving..." : editId ? "Save Changes" : "Create Staff"}
+                  {saving
+                    ? "Saving..."
+                    : editId
+                      ? "Save Changes"
+                      : "Create Staff"}
                 </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              Total Staff
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{staff.length}</div>
-          </CardContent>
-        </Card>
-        {(Object.entries(ROLE_LABELS) as [StaffRole, string][]).map(([roleKey, label]) => (
-          <Card key={roleKey}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {label}s
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{roleCounts[roleKey] || 0}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <OverviewStats columns={5}>
+        <OverviewStat
+          label="Total staff"
+          value={staff.length}
+          icon={Users}
+          tone="brand"
+          detail="Coaching team"
+        />
+        {(Object.entries(ROLE_LABELS) as [StaffRole, string][]).map(
+          ([roleKey, label]) => (
+            <OverviewStat
+              key={roleKey}
+              label={
+                roleKey === "experience" ? "Experienced" : `${label}s`
+              }
+              value={roleCounts[roleKey] || 0}
+              icon={ROLE_STAT[roleKey].icon}
+              tone={ROLE_STAT[roleKey].tone}
+              detail={
+                roleKey === "lead"
+                  ? "Senior coaches"
+                  : roleKey === "experience"
+                    ? "Core coaches"
+                    : roleKey === "junior"
+                      ? "Developing coaches"
+                      : "In evaluation"
+              }
+            />
+          )
+        )}
+      </OverviewStats>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Experience</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="w-[140px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedStaff.map((member) => (
-                <TableRow key={member.id}>
-                  <TableCell className="font-medium">
-                    {member.lastName}, {member.firstName}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={ROLE_VARIANTS[member.role]}>
-                      {ROLE_LABELS[member.role]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">
-                      {member.yearsExperience ?? 0} yr{(member.yearsExperience ?? 0) !== 1 ? "s" : ""}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {member.userId ? (
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="secondary" className="gap-1 w-fit">
-                          <KeyRound className="h-3 w-3" />
-                          Linked
-                        </Badge>
-                        {member.email && (
-                          <span className="text-xs text-muted-foreground">
-                            {member.email}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => openLinkAccount(member.id)}
-                      >
-                        <UserPlus className="h-3 w-3" />
-                        Link Account
-                      </Button>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {member.userId && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Reset password"
-                          onClick={() => openResetPassword(member.id)}
-                        >
-                          <KeyRound className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(member.id)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive"
-                        onClick={() => handleRemove(member.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+      {sortedStaff.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No staff yet"
+          description="Add your coaching staff to start collecting availability."
+          action={
+            <Button onClick={openAdd}>
+              <Plus className="size-4" />
+              Add Staff
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          {/* Mobile: card list */}
+          <div className="space-y-3 md:hidden">
+            {sortedStaff.map((member) => (
+              <Card key={member.id} className="gap-0 p-3 sm:p-4">
+                <div>
+                  <div className="min-w-0">
+                    <p className="font-semibold">
+                      {member.firstName} {member.lastName}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <RoleBadge role={member.role} />
+                      <span className="text-xs text-muted-foreground">
+                        {member.yearsExperience ?? 0} yr
+                        {(member.yearsExperience ?? 0) !== 1 ? "s" : ""} exp
+                      </span>
                     </div>
-                  </TableCell>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-end justify-between gap-2 border-t pt-3">
+                  <div className="min-w-0 flex-1">{renderAccount(member)}</div>
+                  {renderActions(member)}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <Card className="hidden p-0 md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Experience</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="w-[140px] pr-4 text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {sortedStaff.map((member) => (
+                  <TableRow key={member.id}>
+                    <TableCell className="pl-4 font-medium">
+                      {member.lastName}, {member.firstName}
+                    </TableCell>
+                    <TableCell>
+                      <RoleBadge role={member.role} />
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {member.yearsExperience ?? 0} yr
+                      {(member.yearsExperience ?? 0) !== 1 ? "s" : ""}
+                    </TableCell>
+                    <TableCell>{renderAccount(member)}</TableCell>
+                    <TableCell className="pr-4">
+                      <div className="flex justify-end">
+                        {renderActions(member)}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
 
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Link Login Account
-            </DialogTitle>
+            <DialogTitle>Link Login Account</DialogTitle>
+            <DialogDescription>
+              Create a login account for{" "}
+              <span className="font-medium text-foreground">
+                {staff.find((s) => s.id === linkStaffId)?.firstName}{" "}
+                {staff.find((s) => s.id === linkStaffId)?.lastName}
+              </span>
+              . They will use these credentials to sign in and set availability.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Create a login account for{" "}
-            <span className="font-medium text-foreground">
-              {staff.find((s) => s.id === linkStaffId)?.firstName}{" "}
-              {staff.find((s) => s.id === linkStaffId)?.lastName}
-            </span>
-            . They will use these credentials to sign in and set their availability.
-          </p>
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 pt-1">
             <div className="space-y-2">
               <Label>Email</Label>
               <Input
@@ -554,15 +654,15 @@ export default function StaffManagementPage() {
                 placeholder="Set a password"
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleLinkAccount} disabled={linking}>
-                {linking ? "Creating..." : "Create Account"}
-              </Button>
-            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleLinkAccount} disabled={linking}>
+              {linking ? "Creating..." : "Create Account"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -570,25 +670,16 @@ export default function StaffManagementPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for{" "}
+              <span className="font-medium text-foreground">
+                {staff.find((s) => s.id === resetStaffId)?.firstName}{" "}
+                {staff.find((s) => s.id === resetStaffId)?.lastName}
+              </span>
+              . Share the new password with them so they can sign in.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Set a new password for{" "}
-            <span className="font-medium text-foreground">
-              {staff.find((s) => s.id === resetStaffId)?.firstName}{" "}
-              {staff.find((s) => s.id === resetStaffId)?.lastName}
-            </span>
-            {staff.find((s) => s.id === resetStaffId)?.email && (
-              <>
-                {" "}(
-                <span className="font-medium text-foreground">
-                  {staff.find((s) => s.id === resetStaffId)?.email}
-                </span>
-                )
-              </>
-            )}
-            . Share the new password with them so they can sign in.
-          </p>
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 pt-1">
             <div className="space-y-2">
               <Label>New Password</Label>
               <PasswordInput
@@ -605,15 +696,15 @@ export default function StaffManagementPage() {
                 placeholder="Re-enter password"
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleResetPassword} disabled={resetting}>
-                {resetting ? "Resetting..." : "Reset Password"}
-              </Button>
-            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleResetPassword} disabled={resetting}>
+              {resetting ? "Resetting..." : "Reset Password"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -73,12 +73,12 @@ function SlotChip({
     <SlotAssignmentPopover slot={slot} session={session} allSlots={allSlots}>
       <button
         className={cn(
-          "w-full rounded border px-1.5 py-1 text-left text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+          "w-full rounded-md border px-1.5 py-1.5 text-left text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           assignedMember
             ? isPartial
-              ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-              : "bg-green-50 text-green-900 border-green-300 hover:bg-green-100"
-            : "bg-muted/30 text-muted-foreground border-dashed hover:bg-muted hover:border-solid"
+              ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+              : "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+            : "border-dashed bg-muted/30 text-muted-foreground hover:border-solid hover:bg-muted"
         )}
       >
         {assignedMember ? (
@@ -87,7 +87,7 @@ function SlotChip({
               {assignedMember.firstName[0]}. {assignedMember.lastName}
             </span>
             {isPartial && (
-              <span className="flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+              <span className="flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300">
                 <Clock className="h-2.5 w-2.5 shrink-0" />
                 {formatTimeCompact(workedStart)}–{formatTimeCompact(workedEnd)}
               </span>
@@ -123,7 +123,7 @@ function AutoAssignPopover({
         title="Auto-assigning…"
         aria-label="Auto-assigning staff to this class"
         role="status"
-        className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground"
+        className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
       >
         <Loader2 className="h-3 w-3 animate-spin" />
       </div>
@@ -137,7 +137,7 @@ function AutoAssignPopover({
           type="button"
           title="Auto assign staff to this class"
           aria-label="Auto assign staff to this class"
-          className="h-5 w-5 shrink-0 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <Sparkles className="h-3 w-3" />
         </button>
@@ -149,7 +149,7 @@ function AutoAssignPopover({
             Fill empty slots using a profile.
           </p>
         </div>
-        <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto p-1">
           {profiles.length === 0 && (
             <p className="px-2 py-2 text-[10px] text-muted-foreground italic">
               No profiles yet. Create one in Settings.
@@ -160,7 +160,7 @@ function AutoAssignPopover({
               key={profile.id}
               type="button"
               onClick={() => handlePick(profile.id)}
-              className="w-full rounded px-2 py-1.5 text-left hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded px-2 py-1.5 text-left hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <div className="text-xs font-medium">{profile.name}</div>
             </button>
@@ -260,7 +260,7 @@ function SessionConfigPopover({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
-        className="w-80 p-0 max-h-[calc(100vh-8rem)] overflow-y-auto"
+        className="max-h-[calc(100dvh-8rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto p-0"
         align="start"
         side="bottom"
         sideOffset={6}
@@ -479,7 +479,7 @@ function AddSessionDialog({ schedule }: { schedule: Schedule }) {
               max={schedule.endDate}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="add-sess-start">Start Time</Label>
               <Input
@@ -853,20 +853,20 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 mb-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-semibold">Staff Assignments</h2>
-        </div>
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
+          Staff Assignments
+        </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border p-0.5">
+          <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
             {(["day", "week"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
                 className={cn(
-                  "rounded px-3 py-1 text-sm capitalize transition-colors",
+                  "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors",
                   view === v
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -875,13 +875,23 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
             ))}
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shift(-1)}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => shift(-1)}
+              aria-label={`Previous ${viewLabel}`}
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={goToday}>
               Today
             </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shift(1)}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => shift(1)}
+              aria-label={`Next ${viewLabel}`}
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -889,15 +899,15 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 mb-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-medium">{rangeLabel}</p>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-col gap-3 rounded-xl border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold">{rangeLabel}</p>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <Select
             value={selectedProfileId}
             onValueChange={setSelectedProfileId}
             disabled={sortedProfiles.length === 0}
           >
-            <SelectTrigger className="h-8 w-[180px]">
+            <SelectTrigger className="col-span-2 h-8 w-full sm:w-[180px]">
               <SelectValue placeholder="Select a profile" />
             </SelectTrigger>
             <SelectContent>
@@ -910,6 +920,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           </Select>
           <Button
             size="sm"
+            className="w-full sm:w-auto"
             onClick={handleAutoAssignScope}
             disabled={scopeBusy || sortedProfiles.length === 0 || scopedSessionIds.length === 0}
           >
@@ -923,6 +934,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={() => setClearDialogOpen(true)}
             disabled={scopeBusy || scopedSessionIds.length === 0}
           >
@@ -938,11 +950,17 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           session.
         </div>
       ) : (
-      <div ref={scrollRef} className="overflow-x-auto rounded-lg border">
+      <div className="space-y-1.5">
+      <p className="flex items-center gap-1 text-xs text-muted-foreground lg:hidden">
+        <ChevronLeft className="size-3" />
+        Swipe to see all days
+        <ChevronRight className="size-3" />
+      </p>
+      <div ref={scrollRef} className="scroll-fade-x no-scrollbar overflow-x-auto rounded-lg border">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="sticky left-0 z-20 bg-muted/95 backdrop-blur px-3 py-2 text-left font-medium min-w-[120px] border-r">
+              <th className="sticky left-0 z-20 min-w-[105px] border-r bg-muted/95 px-2 py-2 text-left font-medium backdrop-blur sm:min-w-[120px] sm:px-3">
                 Time
               </th>
               {dates.map((date) => {
@@ -950,7 +968,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                 return (
                   <th
                     key={date}
-                    className="px-1 py-2 text-center font-normal min-w-[150px] border-r last:border-r-0"
+                    className="min-w-[130px] border-r px-1 py-2 text-center font-normal last:border-r-0 sm:min-w-[150px]"
                   >
                     <div className="text-xs font-medium">{dayAbbr}</div>
                     <div className="text-[10px] text-muted-foreground">
@@ -965,7 +983,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
           <tbody>
             {timeColumns.map((tc) => (
               <tr key={tc} className="border-b hover:bg-muted/10">
-                <td className="sticky left-0 z-10 bg-background px-3 py-2 font-medium whitespace-nowrap align-top border-r">
+                <td className="sticky left-0 z-10 whitespace-nowrap border-r bg-background px-2 py-2 align-top font-medium sm:px-3">
                   <div className="text-xs font-semibold">
                     {tc.split("–")[0]}
                   </div>
@@ -1025,7 +1043,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
                                   session={session}
                                   schedule={schedule}
                                 >
-                                  <button className="flex-1 min-w-0 flex items-center justify-between gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted group">
+                                  <button className="group flex min-w-0 flex-1 items-center justify-between gap-1 rounded px-1 py-1 text-[11px] transition-colors hover:bg-muted">
                                     <div className="flex items-center gap-1 min-w-0">
                                       {classConfig ? (
                                         <span
@@ -1089,6 +1107,7 @@ export function SessionSlotsPanel({ schedule }: { schedule: Schedule }) {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
       )}
 
