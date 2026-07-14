@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { timeRangesOverlap } from "@/lib/time";
+import { formatTimeCompact, timeRangesOverlap } from "@/lib/time";
 import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, User, X } from "lucide-react";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
@@ -129,7 +129,14 @@ export function SlotAssignmentPopover({
       );
       const status = avail?.status || "pending";
       const conflictLabel = conflictLabelByStaffId.get(member.id);
-      return { member, status, isDoubleBooked: Boolean(conflictLabel), conflictLabel };
+      return {
+        member,
+        status,
+        customStartTime: avail?.customStartTime,
+        customEndTime: avail?.customEndTime,
+        isDoubleBooked: Boolean(conflictLabel),
+        conflictLabel,
+      };
     });
 
   const availableStaff = assignableStaff
@@ -193,16 +200,31 @@ export function SlotAssignmentPopover({
   function renderStaffRow({
     member,
     status,
+    customStartTime,
+    customEndTime,
     isDoubleBooked,
     conflictLabel,
   }: {
     member: typeof staff[number];
     status: string;
+    customStartTime?: string;
+    customEndTime?: string;
     isDoubleBooked?: boolean;
     conflictLabel?: string;
   }) {
     const isAssigned = slot.assignedStaffId === member.id;
     const count = assignmentCounts.get(member.id) || 0;
+    const hasPartialAvailability =
+      status === "available" && Boolean(customStartTime || customEndTime);
+    const availabilityWindow =
+      customStartTime && customEndTime
+        ? `${formatTimeCompact(customStartTime)}–${formatTimeCompact(customEndTime)}`
+        : customStartTime
+          ? `from ${formatTimeCompact(customStartTime)}`
+          : customEndTime
+            ? `until ${formatTimeCompact(customEndTime)}`
+            : "";
+
     return (
       <button
         key={member.id}
@@ -233,6 +255,12 @@ export function SlotAssignmentPopover({
                 Double-booked{conflictLabel ? `: ${conflictLabel}` : ""}
               </span>
             )}
+            {hasPartialAvailability && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-600">
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                Available {availabilityWindow}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
@@ -242,10 +270,12 @@ export function SlotAssignmentPopover({
           <span
             className={cn(
               "text-[10px] px-1.5 py-0.5 rounded",
-              STATUS_BADGE[status] ?? "bg-gray-100 text-gray-500"
+              hasPartialAvailability
+                ? "bg-amber-100 text-amber-800"
+                : STATUS_BADGE[status] ?? "bg-gray-100 text-gray-500"
             )}
           >
-            {STATUS_LABEL[status] ?? "No reply"}
+            {hasPartialAvailability ? "Partial" : STATUS_LABEL[status] ?? "No reply"}
           </span>
           {count > 0 && (
             <span className="text-[10px] text-muted-foreground">
@@ -265,7 +295,7 @@ export function SlotAssignmentPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="start">
         <div className="space-y-0">
           <div className="p-3 pb-2 border-b flex items-center justify-between">
             <p className="text-sm font-medium">Assign Staff</p>
