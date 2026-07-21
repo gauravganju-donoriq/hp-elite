@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-const STAFF_ROUTES = ["/dashboard", "/availability"];
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -17,10 +15,9 @@ export async function middleware(request: NextRequest) {
   const isProtected =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/availability") ||
+    pathname.startsWith("/hours") ||
     pathname.startsWith("/schedule") ||
     pathname.startsWith("/admin");
-  const isStaffRoute = STAFF_ROUTES.some((r) => pathname.startsWith(r));
-  const isAdminRoute = pathname.startsWith("/admin");
 
   if (!sessionCookie) {
     if (isProtected || pathname === "/") {
@@ -29,32 +26,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let role: string | undefined;
-  try {
-    const sessionRes = await fetch(
-      new URL("/api/auth/get-session", request.url),
-      { headers: { cookie: request.headers.get("cookie") || "" } }
-    );
-    if (sessionRes.ok) {
-      const session = await sessionRes.json();
-      role = session?.user?.role;
-    }
-  } catch {
-    // Session fetch failed - fall back to "logged in but unknown role".
-  }
-
-  const home = role === "admin" ? "/admin" : "/dashboard";
-
+  // Only resolve the role when it decides the destination (root and auth
+  // pages). Everywhere else the cookie presence check above is enough:
+  // role gating for /admin happens server-side in the admin layout, and the
+  // staff layout redirects admins client-side. This keeps regular
+  // navigations free of any session lookup in middleware.
   if (isAuthPage || pathname === "/") {
+    let role: string | undefined;
+    try {
+      const sessionRes = await fetch(
+        new URL("/api/auth/get-session", request.url),
+        { headers: { cookie: request.headers.get("cookie") || "" } }
+      );
+      if (sessionRes.ok) {
+        const session = await sessionRes.json();
+        role = session?.user?.role;
+      }
+    } catch {
+      // Session fetch failed - fall back to "logged in but unknown role".
+    }
+    const home = role === "admin" ? "/admin" : "/dashboard";
     return NextResponse.redirect(new URL(home, request.url));
-  }
-
-  if (role === "admin" && isStaffRoute) {
-    return NextResponse.redirect(new URL("/admin", request.url));
-  }
-
-  if (role !== "admin" && isAdminRoute) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();

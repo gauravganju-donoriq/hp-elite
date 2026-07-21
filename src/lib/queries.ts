@@ -129,6 +129,59 @@ export async function getUserByEmail(
   return rows[0] ? { id: rows[0].id as string, email: rows[0].email as string } : null;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+function mapAdminUserRow(row: Record<string, unknown>): AdminUser {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    email: row.email as string,
+    createdAt:
+      row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : String(row.createdAt ?? ""),
+  };
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const { rows } = await pool.query(
+    `SELECT id, name, email, "createdAt" FROM "user" WHERE role = 'admin' ORDER BY "createdAt"`
+  );
+  return rows.map(mapAdminUserRow);
+}
+
+export async function getUserById(
+  id: string
+): Promise<{ id: string; email: string; role: string | null } | null> {
+  const { rows } = await pool.query(
+    `SELECT id, email, role FROM "user" WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  return rows[0]
+    ? {
+        id: rows[0].id as string,
+        email: rows[0].email as string,
+        role: (rows[0].role as string) ?? null,
+      }
+    : null;
+}
+
+export async function setUserRole(
+  userId: string,
+  role: "admin" | "user"
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE "user" SET role = $1, "updatedAt" = now() WHERE id = $2`,
+    [role, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function updateUserEmail(userId: string, email: string): Promise<boolean> {
   const { rowCount } = await pool.query(
     `UPDATE "user" SET email = $1, "updatedAt" = now() WHERE id = $2`,

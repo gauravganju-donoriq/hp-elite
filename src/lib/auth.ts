@@ -7,5 +7,14 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  session: {
+    cookieCache: {
+      // Serve getSession from a short-lived signed cookie instead of
+      // querying Postgres on every request. Role/revocation changes
+      // propagate within maxAge.
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
   plugins: [adminPlugin()],
 });

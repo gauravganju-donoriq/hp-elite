@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { formatTimeCompact, timeRangesOverlap } from "@/lib/time";
+import { formatTimeCompact, parseTimeToMinutes, timeRangesOverlap } from "@/lib/time";
 import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, User, X } from "lucide-react";
 
 const ROLE_LABELS: Record<StaffRole, string> = {
@@ -28,6 +28,22 @@ const ROLE_PRIORITY: Record<StaffRole, number> = {
   junior: 2,
   trial: 3,
 };
+
+function toTimeInputValue(time: string): string {
+  const minutes = parseTimeToMinutes(time);
+  if (Number.isNaN(minutes)) return "";
+  const hours = Math.floor(minutes / 60);
+  return `${String(hours).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function toTwelveHourTime(time: string): string {
+  const minutes = parseTimeToMinutes(time);
+  if (Number.isNaN(minutes)) return time;
+  const hours = Math.floor(minutes / 60);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes % 60).padStart(2, "0")} ${suffix}`;
+}
 
 interface SlotAssignmentPopoverProps {
   slot: SessionSlot;
@@ -66,8 +82,12 @@ export function SlotAssignmentPopover({
   const [open, setOpen] = useState(false);
   const [editTimes, setEditTimes] = useState(false);
   const [showOverride, setShowOverride] = useState(false);
-  const [startInput, setStartInput] = useState(slot.assignedStartTime ?? session.startTime);
-  const [endInput, setEndInput] = useState(slot.assignedEndTime ?? session.endTime);
+  const [startInput, setStartInput] = useState(
+    toTimeInputValue(slot.assignedStartTime ?? session.startTime)
+  );
+  const [endInput, setEndInput] = useState(
+    toTimeInputValue(slot.assignedEndTime ?? session.endTime)
+  );
 
   const alreadyAssignedInSession = new Set(
     allSlots
@@ -170,15 +190,20 @@ export function SlotAssignmentPopover({
   const hasCustomTimes = Boolean(slot.assignedStartTime || slot.assignedEndTime);
 
   function handleSaveTimes() {
-    setSlotTimes(session.id, slot.id, startInput.trim(), endInput.trim());
+    setSlotTimes(
+      session.id,
+      slot.id,
+      toTwelveHourTime(startInput),
+      toTwelveHourTime(endInput)
+    );
     setEditTimes(false);
     setOpen(false);
   }
 
   function handleResetTimes() {
     setSlotTimes(session.id, slot.id, null, null);
-    setStartInput(session.startTime);
-    setEndInput(session.endTime);
+    setStartInput(toTimeInputValue(session.startTime));
+    setEndInput(toTimeInputValue(session.endTime));
     setEditTimes(false);
     setOpen(false);
   }
@@ -329,8 +354,12 @@ export function SlotAssignmentPopover({
                     size="sm"
                     className="h-6 text-xs px-2"
                     onClick={() => {
-                      setStartInput(slot.assignedStartTime ?? session.startTime);
-                      setEndInput(slot.assignedEndTime ?? session.endTime);
+                      setStartInput(
+                        toTimeInputValue(slot.assignedStartTime ?? session.startTime)
+                      );
+                      setEndInput(
+                        toTimeInputValue(slot.assignedEndTime ?? session.endTime)
+                      );
                       setEditTimes(true);
                     }}
                   >
@@ -346,16 +375,24 @@ export function SlotAssignmentPopover({
                   </p>
                   <div className="flex items-center gap-2">
                     <Input
+                      type="time"
                       value={startInput}
                       onChange={(e) => setStartInput(e.target.value)}
-                      placeholder="9:00 AM"
+                      min={toTimeInputValue(session.startTime)}
+                      max={toTimeInputValue(session.endTime)}
+                      step={900}
+                      aria-label="Worked start time"
                       className="h-7 text-xs"
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
+                      type="time"
                       value={endInput}
                       onChange={(e) => setEndInput(e.target.value)}
-                      placeholder="12:00 PM"
+                      min={toTimeInputValue(session.startTime)}
+                      max={toTimeInputValue(session.endTime)}
+                      step={900}
+                      aria-label="Worked end time"
                       className="h-7 text-xs"
                     />
                   </div>

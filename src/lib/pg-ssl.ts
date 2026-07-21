@@ -36,7 +36,7 @@ function loadCaCert(): string | undefined {
  *   verifies the server against it (sslmode=verify-full semantics:
  *   rejectUnauthorized true + hostname check).
  * - Otherwise falls back to an encrypted-but-unverified connection so other
- *   providers (e.g. Azure) without a bundled CA keep working.
+ *   providers without a bundled CA keep working.
  */
 function resolveSsl(url: string): PoolConfig["ssl"] {
   if (!url.includes("sslmode=")) {

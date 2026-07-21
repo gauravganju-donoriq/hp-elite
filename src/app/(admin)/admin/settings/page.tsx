@@ -37,7 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LogOut, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Plus, Pencil, Trash2, Tag, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { AutoAssignProfilesPanel } from "@/components/auto-assign-profiles-panel";
 import {
@@ -338,6 +339,26 @@ export default function SettingsPage() {
       </Card>
 
       <AutoAssignProfilesPanel />
+
+      <Card className="gap-0 py-0">
+        <CardHeader className="border-b py-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="size-4 text-primary" />
+            Administrators
+          </CardTitle>
+          <CardDescription>
+            Manage who has admin access, or grant admin rights to another user.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="py-4">
+          <Button variant="outline" asChild>
+            <Link href="/admin/admins">
+              <ShieldCheck className="size-4" />
+              Manage Admins
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card className="lg:hidden">
         <CardHeader>

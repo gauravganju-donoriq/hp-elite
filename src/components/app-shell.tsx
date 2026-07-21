@@ -14,6 +14,7 @@ import {
   LogOut,
   Settings,
   Shield,
+  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -65,6 +66,13 @@ const ADMIN_NAV: NavItem[] = [
     short: "Settings",
     icon: Settings,
     match: (p) => p.startsWith("/admin/settings"),
+  },
+  {
+    href: "/admin/admins",
+    label: "Admins",
+    short: "Admins",
+    icon: ShieldCheck,
+    match: (p) => p.startsWith("/admin/admins"),
   },
 ];
 
