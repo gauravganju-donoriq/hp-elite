@@ -289,8 +289,9 @@ Footer **Got it**.
   sessions." Toggle button **Show all / Show only incomplete** (defaults to incomplete-only).
 - Table columns: expand chevron, Staff (name + role abbr), Responded (`x/total`, color by
   status), Status pill (Complete green / Partial yellow / No response red), Email (or "No
-  email" badge), **Chase** (outline **Email** button using a prefilled `mailto:` — stops
-  row-click propagation).
+  email" badge), **Chase** (outline **Remind** button that POSTs to
+  `/api/admin/availability-reminder`, which sends the reminder via Resend — shows a
+  sending spinner then a "Reminder sent" confirmation, and stops row-click propagation).
 - Rows with missing sessions are expandable → reveals a wrapped list of "Missing responses (N)"
   badges (day + date + time).
 - Sorting: none → partial → complete, then by name.

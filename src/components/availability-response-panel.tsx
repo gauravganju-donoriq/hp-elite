@@ -16,10 +16,12 @@ import {
   ChevronDown,
   CircleSlash,
   Clock,
+  Loader2,
   Mail,
   Send,
   UsersRound,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDateDisplay } from "@/lib/dates";
 
@@ -81,6 +83,8 @@ export function AvailabilityResponsePanel({ schedule }: { schedule: Schedule }) 
   const { staff, availability } = useScheduling();
   const [incompleteOnly, setIncompleteOnly] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
 
   const sessions = useMemo(
     () =>
@@ -166,11 +170,28 @@ export function AvailabilityResponsePanel({ schedule }: { schedule: Schedule }) 
     });
   }
 
-  function buildMailto(r: StaffResponse): string {
-    const subject = `Availability needed: ${schedule.name}`;
-    const firstName = r.name.split(",")[1]?.trim() || "there";
-    const body = `Hi ${firstName},\n\nPlease submit your availability for "${schedule.name}" as soon as you can. You can update it from your dashboard.\n\nThanks!`;
-    return `mailto:${encodeURIComponent(r.email!)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  async function sendReminder(r: StaffResponse) {
+    setSendingId(r.id);
+    try {
+      const res = await fetch("/api/admin/availability-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId: r.id, scheduleId: schedule.id }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to send reminder");
+      }
+
+      setSentIds((prev) => new Set(prev).add(r.id));
+      toast.success(`Reminder sent to ${r.name.split(",")[1]?.trim() || r.name}.`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send reminder";
+      toast.error(message);
+    } finally {
+      setSendingId(null);
+    }
   }
 
   return (
@@ -395,11 +416,33 @@ export function AvailabilityResponsePanel({ schedule }: { schedule: Schedule }) 
                           </Button>
                         )}
                         {r.status !== "complete" && r.email && (
-                          <Button size="sm" variant="outline" className="flex-1 sm:flex-none" asChild>
-                            <a href={buildMailto(r)} aria-label={`Email reminder to ${r.name}`}>
-                              <Send className="size-4" />
-                              <span>Remind</span>
-                            </a>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 sm:flex-none"
+                            disabled={sendingId === r.id}
+                            aria-label={`Email reminder to ${r.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              sendReminder(r);
+                            }}
+                          >
+                            {sendingId === r.id ? (
+                              <>
+                                <Loader2 className="size-4 animate-spin" />
+                                <span>Sending</span>
+                              </>
+                            ) : sentIds.has(r.id) ? (
+                              <>
+                                <CheckCircle2 className="size-4" />
+                                <span>Reminder sent</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="size-4" />
+                                <span>Remind</span>
+                              </>
+                            )}
                           </Button>
                         )}
                       </div>

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -24,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/page-header";
 import { OverviewStat, OverviewStats } from "@/components/overview-stats";
 import { EmptyState, LoadingState } from "@/components/states";
 import { useScheduling } from "@/lib/context";
@@ -249,159 +249,186 @@ export default function SchedulePage() {
   return (
     <div className="space-y-5 sm:space-y-6">
       <div className="print:hidden">
-        <PageHeader
-          title="Schedule"
-          description="Who is scheduled and who is available, at a glance."
-          actions={
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-                disabled={!board}
-              >
-                <Printer className="h-4 w-4" />
-                Print
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleExport}
-                disabled={!board || exporting}
-              >
-                <Download className="h-4 w-4" />
-                {exporting ? "Exporting..." : "Export image"}
-              </Button>
-            </>
-          }
-        />
+        <Card className="overflow-hidden border-primary/15 bg-linear-to-br from-primary/10 via-card to-card">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3.5">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm sm:size-12">
+                  <CalendarDays className="size-5 sm:size-6" />
+                </span>
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                    Team calendar
+                  </p>
+                  <h1 className="text-xl font-bold tracking-tight sm:text-3xl">
+                    Schedule
+                  </h1>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    See every session, staffing assignment, and open position.
+                  </p>
+                </div>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 w-full justify-center bg-background/70 sm:min-h-0 sm:w-auto"
+                  onClick={() => window.print()}
+                  disabled={!board}
+                >
+                  <Printer className="h-4 w-4" />
+                  Print
+                </Button>
+                <Button
+                  size="sm"
+                  className="min-h-11 w-full justify-center sm:min-h-0 sm:w-auto"
+                  onClick={handleExport}
+                  disabled={!board || exporting}
+                >
+                  <Download className="h-4 w-4" />
+                  {exporting ? "Exporting..." : "Export image"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {schedules.length === 0 ? (
         <EmptyState icon={CalendarDays} title="No schedules yet" />
       ) : (
         <>
-          <div className="rounded-xl border bg-card p-3 shadow-sm print:hidden">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <Select value={scheduleId} onValueChange={handleScheduleChange}>
-                <SelectTrigger className="w-full lg:w-72">
-                  <SelectValue placeholder="Select a schedule" />
-                </SelectTrigger>
-                <SelectContent>
-                  {schedules.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <Card className="gap-0 overflow-hidden py-0 print:hidden">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <Select value={scheduleId} onValueChange={handleScheduleChange}>
+                  <SelectTrigger className="w-full bg-background lg:w-72">
+                    <SelectValue placeholder="Select a schedule" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schedules.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
-                <div className="inline-flex rounded-lg bg-muted p-1">
-                  {(["day", "week"] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setView(v)}
-                      aria-pressed={view === v}
-                      className={cn(
-                        "rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                        view === v
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
+                  <div className="inline-flex w-full rounded-lg bg-muted p-1 sm:w-auto">
+                    {(["day", "week"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setView(v)}
+                        aria-pressed={view === v}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-2 text-sm font-medium capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring sm:flex-none sm:py-1.5",
+                          view === v
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid w-full grid-cols-[2.75rem_1fr_2.75rem] items-center gap-1 sm:flex sm:w-auto">
+                    <Button
+                      variant="outline"
+                      size="icon-lg"
+                      className="size-11 sm:size-9"
+                      onClick={() => shift(-1)}
+                      aria-label={`Previous ${view}`}
                     >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9"
-                    onClick={() => shift(-1)}
-                    aria-label={`Previous ${view}`}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={goToday}>
-                    Today
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9"
-                    onClick={() => shift(1)}
-                    aria-label={`Next ${view}`}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11 sm:min-h-0"
+                      onClick={goToday}
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon-lg"
+                      className="size-11 sm:size-9"
+                      onClick={() => shift(1)}
+                      aria-label={`Next ${view}`}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="scroll-fade-x no-scrollbar mt-3 flex gap-1 overflow-x-auto border-t pt-3 sm:grid sm:grid-cols-7 sm:gap-2 sm:overflow-visible">
-              {navigationDates.map((date) => {
-                const dateDisplay = formatDateDisplay(date);
-                const count = sessionsByDate.get(date)?.length ?? 0;
-                const isSelected = date === anchor;
-                const isToday = date === todayISO();
-                const isInSchedule =
-                  !selectedSchedule ||
-                  (date >= selectedSchedule.startDate &&
-                    date <= selectedSchedule.endDate);
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    disabled={!isInSchedule}
-                    onClick={() => {
-                      setAnchor(date);
-                      setView("day");
-                    }}
-                    className={cn(
-                      "group min-w-11 shrink-0 rounded-lg px-1 py-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:min-w-0 sm:px-2",
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
-                    )}
-                    aria-label={`${dateDisplay.fullLong}, ${count} session${count === 1 ? "" : "s"}`}
-                  >
-                    <span
+              <div className="mt-3 grid grid-cols-7 gap-1 border-t pt-3 sm:gap-2">
+                {navigationDates.map((date) => {
+                  const dateDisplay = formatDateDisplay(date);
+                  const count = sessionsByDate.get(date)?.length ?? 0;
+                  const isSelected = date === anchor;
+                  const isToday = date === todayISO();
+                  const isInSchedule =
+                    !selectedSchedule ||
+                    (date >= selectedSchedule.startDate &&
+                      date <= selectedSchedule.endDate);
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      disabled={!isInSchedule}
+                      onClick={() => {
+                        setAnchor(date);
+                        setView("day");
+                      }}
                       className={cn(
-                        "block text-[10px] font-semibold uppercase tracking-wide sm:text-xs",
+                        "group min-w-0 rounded-lg px-0.5 py-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:px-2",
                         isSelected
-                          ? "text-primary-foreground/80"
-                          : "text-muted-foreground"
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-accent hover:text-accent-foreground"
                       )}
+                      aria-label={`${dateDisplay.fullLong}, ${count} session${count === 1 ? "" : "s"}`}
                     >
-                      {dateDisplay.dayAbbr}
-                    </span>
-                    <span className="mt-0.5 block text-sm font-semibold sm:text-base">
-                      {parseISODate(date).getUTCDate()}
-                    </span>
-                    <span
-                      className={cn(
-                        "mx-auto mt-1 block size-1.5 rounded-full",
-                        count > 0
-                          ? isSelected
-                            ? "bg-primary-foreground"
-                            : "bg-primary"
-                          : "bg-transparent",
-                        isToday && !isSelected && "ring-2 ring-primary/30 ring-offset-1"
-                      )}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                      <span
+                        className={cn(
+                          "block text-[10px] font-semibold uppercase tracking-wide sm:text-xs",
+                          isSelected
+                            ? "text-primary-foreground/80"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {dateDisplay.dayAbbr}
+                      </span>
+                      <span className="mt-0.5 block text-sm font-semibold sm:text-base">
+                        {parseISODate(date).getUTCDate()}
+                      </span>
+                      <span
+                        className={cn(
+                          "mx-auto mt-1 block size-1.5 rounded-full",
+                          count > 0
+                            ? isSelected
+                              ? "bg-primary-foreground"
+                              : "bg-primary"
+                            : "bg-transparent",
+                          isToday &&
+                            !isSelected &&
+                            "ring-2 ring-primary/30 ring-offset-1"
+                        )}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
           <div
             ref={captureRef}
             className="overflow-hidden rounded-xl border bg-card shadow-sm"
           >
-            <div className="border-b bg-muted/30 px-4 py-4 sm:px-6">
+            <div className="border-b bg-linear-to-r from-primary/7 via-muted/20 to-transparent px-4 py-4 sm:px-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:size-10">
@@ -547,7 +574,7 @@ function SessionCard({
       )}
     >
       <div className="grid sm:grid-cols-[9rem_1fr]">
-        <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3 sm:block sm:border-r sm:border-b-0 sm:px-5 sm:py-5">
+        <div className="flex flex-col items-start gap-2 border-b bg-muted/30 px-4 py-3 sm:block sm:border-r sm:border-b-0 sm:px-5 sm:py-5">
           <div>
             <p className="flex items-center gap-1.5 text-base font-semibold tabular-nums">
               <Clock className="h-4 w-4 text-primary" />
@@ -557,7 +584,7 @@ function SessionCard({
               until {session.endTime}
             </p>
           </div>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground sm:mt-4">
+          <span className="flex max-w-full items-center gap-1 text-xs text-muted-foreground sm:mt-4">
             <MapPin className="h-3.5 w-3.5" />
             <span className="max-w-full truncate sm:max-w-28">{session.location}</span>
           </span>
@@ -647,7 +674,7 @@ function SessionCard({
                       >
                         {initialsForName(s.name)}
                       </span>
-                      <span className="font-medium">
+                      <span className="max-w-32 truncate font-medium sm:max-w-none">
                         {s.name}
                         {isMe && (
                           <span className="ml-1 text-[10px] text-primary">

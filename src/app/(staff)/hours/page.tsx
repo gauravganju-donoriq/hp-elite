@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock, Loader2, CheckCircle2, Save } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  CircleDashed,
+  Clock,
+  Loader2,
+  Save,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -14,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/page-header";
 import { EmptyState, LoadingState } from "@/components/states";
 import { useStaffIdentity } from "@/lib/staff-context";
 import { useScheduling } from "@/lib/context";
@@ -193,13 +199,68 @@ export default function StaffHoursPage() {
   }
 
   const busy = identityLoading || schedulesLoading || loading;
+  const submittedCount = weeks.filter((week) =>
+    submissionByWeek.has(week.weekStart)
+  ).length;
+  const outstandingCount = Math.max(weeks.length - submittedCount, 0);
+  const totalSubmittedHours = weeks.reduce(
+    (total, week) =>
+      total + (submissionByWeek.get(week.weekStart)?.submittedHours ?? 0),
+    0
+  );
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <PageHeader
-        title="My Hours"
-        description="After each week ends, report the hours you actually worked. Your admin compares these against the scheduled hours."
-      />
+      <Card className="overflow-hidden border-primary/15 bg-linear-to-br from-primary/10 via-card to-card">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3.5">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm sm:size-12">
+                <CalendarClock className="size-5 sm:size-6" />
+              </span>
+              <div className="min-w-0">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                  Time reporting
+                </p>
+                <h1 className="text-xl font-bold tracking-tight sm:text-3xl">
+                  My Hours
+                </h1>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Report your completed weekly hours so the admin can compare
+                  them with the published schedule.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 divide-x overflow-hidden rounded-xl border bg-background/70 shadow-sm lg:w-80 lg:shrink-0">
+              <div className="px-3 py-2.5 text-center sm:px-5">
+                <p className="text-lg font-bold tabular-nums sm:text-xl">
+                  {busy ? "—" : totalSubmittedHours}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+                  Hours
+                </p>
+              </div>
+              <div className="px-3 py-2.5 text-center sm:px-5">
+                <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400 sm:text-xl">
+                  {busy ? "—" : submittedCount}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+                  Submitted
+                </p>
+              </div>
+              <div className="px-3 py-2.5 text-center sm:px-5">
+                <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400 sm:text-xl">
+                  {busy ? "—" : outstandingCount}
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+                  Pending
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {!identity && !identityLoading ? (
         <Card>
@@ -217,40 +278,60 @@ export default function StaffHoursPage() {
           description="Once a scheduled week has ended, it will show up here for you to submit your hours."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 xl:grid-cols-2">
           {weeks.map((week) => {
             const existing = submissionByWeek.get(week.weekStart);
             const draft = getDraft(week);
             const saving = savingWeek === week.weekStart;
             return (
-              <Card key={week.weekStart}>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Clock className="h-4 w-4 text-primary" />
-                      {week.label}
-                    </CardTitle>
+              <Card
+                key={week.weekStart}
+                className="gap-0 overflow-hidden py-0 transition-shadow hover:shadow-md"
+              >
+                <CardHeader className="border-b bg-muted/25 p-4 sm:p-5">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={
+                          existing
+                            ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        }
+                      >
+                        {existing ? (
+                          <CheckCircle2 className="size-4" />
+                        ) : (
+                          <CircleDashed className="size-4" />
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <CardTitle className="truncate text-base">
+                          {week.label}
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          Monday through Sunday
+                        </CardDescription>
+                      </div>
+                    </div>
                     {existing ? (
                       <Badge
                         variant="outline"
-                        className="border-emerald-300 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300"
+                        className="shrink-0 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
                       >
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        {existing.submittedHours} hrs submitted
+                        {existing.submittedHours} hrs
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Not submitted
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                      >
+                        Pending
                       </Badge>
                     )}
                   </div>
-                  <CardDescription>
-                    Week of {formatShort(week.weekStart)} through{" "}
-                    {formatShort(week.weekEnd)}.
-                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+                <CardContent className="space-y-4 p-4 sm:p-5">
+                  <div className="grid gap-4 sm:grid-cols-[140px_1fr]">
                     <div className="space-y-1.5">
                       <Label htmlFor={`hours-${week.weekStart}`}>
                         Hours worked
@@ -262,6 +343,7 @@ export default function StaffHoursPage() {
                         step="0.25"
                         inputMode="decimal"
                         placeholder="e.g. 12.5"
+                        className="font-medium tabular-nums"
                         value={draft.hours}
                         onChange={(e) =>
                           setDraft(week.weekStart, { hours: e.target.value })
@@ -282,7 +364,12 @@ export default function StaffHoursPage() {
                       />
                     </div>
                   </div>
-                  <div className="flex justify-stretch sm:justify-end">
+                  <div className="flex items-center justify-between gap-3 border-t pt-4">
+                    <p className="hidden text-xs text-muted-foreground sm:block">
+                      {existing
+                        ? "Last submitted value is shown."
+                        : "Ready when your week is complete."}
+                    </p>
                     <Button
                       className="w-full sm:w-auto"
                       onClick={() => handleSave(week)}
@@ -290,12 +377,12 @@ export default function StaffHoursPage() {
                     >
                       {saving ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="size-4 animate-spin" />
                           Saving...
                         </>
                       ) : (
                         <>
-                          <Save className="mr-2 h-4 w-4" />
+                          <Save className="size-4" />
                           {existing ? "Update hours" : "Submit hours"}
                         </>
                       )}
